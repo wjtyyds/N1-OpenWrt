@@ -49,8 +49,6 @@ jobs:
     - name: 拉取 OpenWrt 官方源码 (指定 Tag)
       run: |
         git clone --depth 1 --branch ${{ github.event.inputs.openwrt_tag }} $REPO_URL openwrt
-        cd openwrt
-        echo "src-git custom https://github.com/kiddin9/openwrt-packages.git" >> feeds.conf.default
 
     - name: 智能解析内核完整版本号
       id: parse_kernel
