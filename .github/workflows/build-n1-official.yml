@@ -1,0 +1,177 @@
+name: Build OpenWrt N1 (Official + Packit)
+
+on:
+  workflow_dispatch:
+    inputs:
+      openwrt_tag:
+        description: 'OpenWrt 官方源码标签 (例如: v25.12.5)'
+        required: true
+        default: 'v25.12.5'
+      kernel_version:
+        description: '内核纯数字版本号 (例如: 6.18.44)'
+        required: true
+        default: '6.18.44'
+
+env:
+  REPO_URL: https://github.com/openwrt/openwrt.git
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write # 必须赋予写入权限以支持发布 Release
+
+    steps:
+    - name: 检出当前仓库
+      uses: actions/checkout@v4
+
+    - name: 准备基础环境
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
+        sudo apt-get update
+        sudo apt-get install -y build-essential clang flex bison g++ awk gcc-multilib g++-multilib \
+        gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev file wget jq
+        sudo apt-get clean
+        sudo timedatectl set-timezone "$TZ"
+
+    - name: 拉取 OpenWrt 官方源码 (指定 Tag)
+      run: |
+        git clone --depth 1 --branch ${{ github.event.inputs.openwrt_tag }} $REPO_URL openwrt
+        cd openwrt
+        echo "src-git custom https://github.com/kiddin9/openwrt-packages.git" >> feeds.conf.default
+
+    - name: 智能解析内核完整版本号
+      id: parse_kernel
+      run: |
+        KV="${{ github.event.inputs.kernel_version }}"
+        echo "🔍 正在探测版本: $KV"
+        mkdir -p /tmp/kernel_tars
+        
+        URL_FLIPPY="https://github.com/wjtyyds/amlogic-s9xxx-armbian/releases/download/kernel_flippy/${KV}.tar"
+        URL_STABLE="https://github.com/wjtyyds/amlogic-s9xxx-armbian/releases/download/kernel_stable/${KV}.tar.gz"
+        
+        # 依次从双通道拉取并解压
+        if wget -qO /tmp/kernel_tars/${KV}.tar "$URL_FLIPPY"; then
+          echo "✅ 从 kernel_flippy 找到对应内核"
+          tar -xf /tmp/kernel_tars/${KV}.tar -C /tmp/kernel_tars/ 2>/dev/null || true
+        elif wget -qO /tmp/kernel_tars/${KV}.tar.gz "$URL_STABLE"; then
+          echo "✅ 从 kernel_stable 找到对应内核"
+          tar -xf /tmp/kernel_tars/${KV}.tar.gz -C /tmp/kernel_tars/ 2>/dev/null || true
+        else
+          echo "❌ 无法找到对应版本的内核资源，请检查版本号！"
+          exit 1
+        fi
+        
+        # 针对 kernel_stable 可能出现的嵌套目录进行展平处理
+        if [ -d "/tmp/kernel_tars/$KV" ]; then
+          mv /tmp/kernel_tars/$KV/* /tmp/kernel_tars/ 2>/dev/null || true
+        fi
+        
+        # 寻找 boot 压缩包并提取全名
+        BOOT_TAR=$(find /tmp/kernel_tars -maxdepth 1 -type f -name "boot-*.tar.gz" | head -n 1)
+        if [ -z "$BOOT_TAR" ]; then 
+          echo "❌ 未找到 boot 压缩包，无法推导完整版本号！"
+          exit 1
+        fi
+        
+        FULL_VER=$(basename "$BOOT_TAR" | sed -E 's/boot-(.*)\.tar\.gz/\1/')
+        echo "🎯 提取到完整版本号: $FULL_VER"
+        
+        # 将完整版本号写入环境变量供打包步骤使用
+        echo "FULL_VER=$FULL_VER" >> $GITHUB_ENV
+
+    - name: 更新并清理官方冲突源
+      run: |
+        cd openwrt
+        ./scripts/feeds update -a
+        
+        # 包含所有自定义插件的卸载
+        ./scripts/feeds uninstall adguardhome luci-app-adguardhome diskman luci-app-diskman \
+        lucky luci-app-lucky oaf kmod-oaf appfilter luci-app-appfilter openappfilter luci-app-openappfilter \
+        luci-theme-aurora luci-app-aurora-config openclash luci-app-openclash
+        
+        # 包含所有自定义插件的物理粉碎
+        for pkg in adguardhome diskman lucky oaf appfilter openappfilter aurora openclash; do
+            find ./feeds -type d -iname "*$pkg*" -exec rm -rf {} +
+        done
+
+    - name: 注入指定第三方高优插件
+      run: |
+        cd openwrt
+        mkdir -p package/custom
+        
+        git clone --branch v1.2.0 --depth 1 https://github.com/eamonxg/luci-theme-aurora.git package/custom/luci-theme-aurora
+        git clone --branch v1.2.0 --depth 1 https://github.com/eamonxg/luci-app-aurora-config.git package/custom/luci-app-aurora-config
+        git clone --branch v0.2.11 --depth 1 https://github.com/lisaac/luci-app-diskman.git package/custom/luci-app-diskman
+        git clone --branch v2.19.5 --depth 1 https://github.com/gdy666/luci-app-lucky.git package/custom/lucky
+        git clone --branch v6.1.8 --depth 1 https://github.com/destan19/OpenAppFilter.git package/custom/luci-app-oaf
+        git clone https://github.com/sirpdboy/luci-app-adguardhome.git package/custom/luci-app-adguardhome
+        git clone --depth 1 https://github.com/vernesong/OpenClash.git package/custom/luci-app-openclash
+        
+        ./scripts/feeds install -a
+
+    - name: 载入自定义编译配置 (.config)
+      run: |
+        cd openwrt
+        # 引用仓库中的 config/openwrt.config
+        if [ -f ../config/openwrt.config ]; then
+          echo "✅ 检测到 config/openwrt.config，正在载入..."
+          cp ../config/openwrt.config .config
+          make defconfig
+        else
+          echo "❌ 找不到 config/openwrt.config 文件，请确保文件存在于仓库中！"
+          exit 1
+        fi
+
+    - name: 下载所需依赖包
+      run: |
+        cd openwrt
+        make download -j8
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: 执行核心编译 (RootFS 生成)
+      run: |
+        cd openwrt
+        make -j$(nproc) V=s
+
+    - name: F大脚本全自动镜像打包 (RootFS -> N1 Img)
+      run: |
+        git clone --depth 1 https://github.com/unifreq/openwrt_packit.git /opt/openwrt_packit
+        
+        ROOTFS_FILE=$(find ./openwrt/bin/targets/armsr/armv8/ -name "*rootfs.tar.gz" | head -n 1)
+        
+        # 提前复制一份 rootfs 到工作区，留作发布 Release 的附件
+        cp "$ROOTFS_FILE" ${{ github.workspace }}/openwrt-rootfs.tar.gz
+        
+        sudo mv "$ROOTFS_FILE" /opt/openwrt_packit/openwrt-armvirt-64-default-rootfs.tar.gz
+        
+        cd /opt/openwrt_packit
+        sudo chmod +x build.sh
+        
+        # 使用动态解析出来的完整版本号（FULL_VER）进行打包
+        sudo ./build.sh -k $FULL_VER -b s905d -v ${{ github.event.inputs.openwrt_tag }} -s 512
+        
+        sudo gzip -9 /opt/openwrt_packit/output/*.img
+        
+        # 将打包完的固件转移到工作区准备上传
+        cp /opt/openwrt_packit/output/*.img.gz ${{ github.workspace }}/
+
+    - name: 发布至 GitHub Releases
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: "OpenWrt-${{ github.event.inputs.openwrt_tag }}-${{ github.run_number }}"
+        name: "OpenWrt N1 固件 [${{ github.event.inputs.openwrt_tag }}]"
+        body: |
+          基于 OpenWrt 官方稳定源 (`${{ github.event.inputs.openwrt_tag }}`) 纯净编译。
+          F大自动适配内核版本: `${{ env.FULL_VER }}`
+          
+          ### 📦 包含资产
+          1. **.img.gz**: 可直接刷入 N1 设备的镜像包。
+          2. **openwrt-rootfs.tar.gz**: 原生编译的 RootFS 纯净文件系统，可用于自定义手动打包或排错。
+        files: |
+          ${{ github.workspace }}/*.img.gz
+          ${{ github.workspace }}/openwrt-rootfs.tar.gz
