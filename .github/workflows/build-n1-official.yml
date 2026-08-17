@@ -20,7 +20,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     permissions:
-      contents: write # 必须赋予写入权限以支持发布 Release
+      contents: write
 
     steps:
     - name: 检出当前仓库
@@ -32,9 +32,17 @@ jobs:
       run: |
         sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
         sudo docker image prune --all --force
-        sudo apt-get update
-        sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
-        gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev file wget jq
+        sudo apt-get update -y
+        sudo apt-get full-upgrade -y
+        sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+        bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib \
+        g++-multilib git gnutls-dev gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev \
+        libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev \
+        libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano \
+        ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils \
+        python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs \
+        upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd btrfs-progs dosfstools uuid-runtime parted fdisk \
+        openssh-server sudo bc jq file
         sudo apt-get clean
         sudo timedatectl set-timezone "$TZ"
 
@@ -42,6 +50,7 @@ jobs:
       run: |
         git clone --depth 1 --branch ${{ github.event.inputs.openwrt_tag }} $REPO_URL openwrt
         cd openwrt
+        echo "src-git custom https://github.com/kiddin9/openwrt-packages.git" >> feeds.conf.default
 
     - name: 智能解析内核完整版本号
       id: parse_kernel
@@ -53,7 +62,6 @@ jobs:
         URL_FLIPPY="https://github.com/wjtyyds/amlogic-s9xxx-armbian/releases/download/kernel_flippy/${KV}.tar"
         URL_STABLE="https://github.com/wjtyyds/amlogic-s9xxx-armbian/releases/download/kernel_stable/${KV}.tar.gz"
         
-        # 依次从双通道拉取并解压
         if wget -qO /tmp/kernel_tars/${KV}.tar "$URL_FLIPPY"; then
           echo "✅ 从 kernel_flippy 找到对应内核"
           tar -xf /tmp/kernel_tars/${KV}.tar -C /tmp/kernel_tars/ 2>/dev/null || true
@@ -65,12 +73,10 @@ jobs:
           exit 1
         fi
         
-        # 针对 kernel_stable 可能出现的嵌套目录进行展平处理
         if [ -d "/tmp/kernel_tars/$KV" ]; then
           mv /tmp/kernel_tars/$KV/* /tmp/kernel_tars/ 2>/dev/null || true
         fi
         
-        # 寻找 boot 压缩包并提取全名
         BOOT_TAR=$(find /tmp/kernel_tars -maxdepth 1 -type f -name "boot-*.tar.gz" | head -n 1)
         if [ -z "$BOOT_TAR" ]; then 
           echo "❌ 未找到 boot 压缩包，无法推导完整版本号！"
@@ -80,7 +86,6 @@ jobs:
         FULL_VER=$(basename "$BOOT_TAR" | sed -E 's/boot-(.*)\.tar\.gz/\1/')
         echo "🎯 提取到完整版本号: $FULL_VER"
         
-        # 将完整版本号写入环境变量供打包步骤使用
         echo "FULL_VER=$FULL_VER" >> $GITHUB_ENV
 
     - name: 更新并清理官方冲突源
@@ -88,12 +93,10 @@ jobs:
         cd openwrt
         ./scripts/feeds update -a
         
-        # 包含所有自定义插件的卸载
         ./scripts/feeds uninstall adguardhome luci-app-adguardhome diskman luci-app-diskman \
         lucky luci-app-lucky oaf kmod-oaf appfilter luci-app-appfilter openappfilter luci-app-openappfilter \
         luci-theme-aurora luci-app-aurora-config openclash luci-app-openclash
         
-        # 包含所有自定义插件的物理粉碎
         for pkg in adguardhome diskman lucky oaf appfilter openappfilter aurora openclash; do
             find ./feeds -type d -iname "*$pkg*" -exec rm -rf {} +
         done
@@ -116,7 +119,6 @@ jobs:
     - name: 载入自定义编译配置 (.config)
       run: |
         cd openwrt
-        # 引用仓库中的 config/openwrt.config
         if [ -f ../config/openwrt.config ]; then
           echo "✅ 检测到 config/openwrt.config，正在载入..."
           cp ../config/openwrt.config .config
@@ -135,6 +137,7 @@ jobs:
     - name: 执行核心编译 (RootFS 生成)
       run: |
         cd openwrt
+        # 这里改回了满血多线程，依赖已经补齐，应该不会再有环境报错了
         make -j$(nproc) V=s
 
     - name: F大脚本全自动镜像打包 (RootFS -> N1 Img)
@@ -143,7 +146,6 @@ jobs:
         
         ROOTFS_FILE=$(find ./openwrt/bin/targets/armsr/armv8/ -name "*rootfs.tar.gz" | head -n 1)
         
-        # 提前复制一份 rootfs 到工作区，留作发布 Release 的附件
         cp "$ROOTFS_FILE" ${{ github.workspace }}/openwrt-rootfs.tar.gz
         
         sudo mv "$ROOTFS_FILE" /opt/openwrt_packit/openwrt-armvirt-64-default-rootfs.tar.gz
@@ -151,12 +153,10 @@ jobs:
         cd /opt/openwrt_packit
         sudo chmod +x build.sh
         
-        # 使用动态解析出来的完整版本号（FULL_VER）进行打包
         sudo ./build.sh -k $FULL_VER -b s905d -v ${{ github.event.inputs.openwrt_tag }} -s 512
         
         sudo gzip -9 /opt/openwrt_packit/output/*.img
         
-        # 将打包完的固件转移到工作区准备上传
         cp /opt/openwrt_packit/output/*.img.gz ${{ github.workspace }}/
 
     - name: 发布至 GitHub Releases
