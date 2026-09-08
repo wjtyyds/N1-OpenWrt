@@ -12,7 +12,8 @@ on:
         options:
           - OpenWrt
           - ImmortalWrt
-          - Lede
+          - Lede-Armsr
+          - Lede-Amlogic
       build_type:
         description: '编译目标'
         required: true
@@ -37,6 +38,11 @@ on:
         options:
           - kernel_flippy
           - kernel_stable
+      export_config:
+        description: '是否在 Release 中附带 .config 配置文件'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   build:
@@ -80,7 +86,7 @@ jobs:
             git clone --depth 1 -b ${{ inputs.source_branch }} https://github.com/openwrt/openwrt openwrt
           elif [ "${{ env.FIRMWARE_LOWER }}" == "immortalwrt" ]; then
             git clone --depth 1 -b ${{ inputs.source_branch }} https://github.com/immortalwrt/immortalwrt openwrt
-          else
+          elif [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
             git clone --depth 1 -b master https://github.com/coolsnowwolf/lede openwrt
           fi
 
@@ -150,7 +156,7 @@ jobs:
           fi
           REAL_KERNEL_VER=$(ls /opt/kernel/boot-* | head -n 1 | sed -e 's|.*/boot-||' -e 's/\.tar\.gz//' -e 's/\.tar//')
           
-          if [ "${{ env.FIRMWARE_LOWER }}" == "lede" ]; then
+          if [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
             if [ "${{ inputs.source_branch }}" != "master" ]; then
               OPENWRT_VER="${{ inputs.source_branch }}"
             else
@@ -325,34 +331,62 @@ jobs:
           
           DATETIME=$(date +'%Y%m%d%H%M')
           
+          # 1. 过滤并重命名打包输出的核心固件 img.gz
           for img in packit/output/*.img.gz; do
-            # 为 img.gz 拼装带时间戳的新名字
-            new_img_name="${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}-k${KERNEL_VERSION}-${DATETIME}.img.gz"
-            cp "$img" "release_files/$new_img_name"
-            # 记录基础名字，用于生成同名的 7z
             base_name="${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}-k${KERNEL_VERSION}-${DATETIME}"
+            new_img_name="${base_name}.img.gz"
+            cp "$img" "release_files/$new_img_name"
           done
+          
+          # 2. config 文件输出控制 (开启则复制 config 到发布目录)
+          if [ "${{ inputs.export_config }}" == "true" ]; then
+            cp openwrt/.config "release_files/${base_name}.config"
+          fi
           
           cd release_files
           
+          # 3. 隔离打包逻辑：私有强制加密 vs 公共无密打包
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
             if [ -z "$ZIP_PASS" ]; then
               echo "错误：未检测到 ZIP_PASS 密钥！为保护隐私，已强制终止打包。"
               exit 1
             fi
             echo "正在为 Personal 固件进行 7z AES-256 加密打包..."
-            # 生成同名 7z 包并将 img.gz 打入其中
-            7z a -p"$ZIP_PASS" -mhe=on "${base_name}.7z" *.img.gz
-            # 清除源 img.gz 保证最终只发布单个加密 7z 文件
+            # 生成加密的 7z，如果含有 config 也会一并卷入
+            7z a -p"$ZIP_PASS" -mhe=on "${base_name}.7z" *
+            # 清理所有未加密的源文件
             find . -type f -not -name '*.7z' -delete
+          else
+            if [ "${{ inputs.export_config }}" == "true" ]; then
+              echo "公共版开启了 config 导出，正在打包为无密码的 7z 压缩包..."
+              # 生成无密码的 7z，将 img.gz 和 config 一并卷入
+              7z a "${base_name}.7z" *
+              # 打包后清理散落的文件
+              find . -type f -not -name '*.7z' -delete
+            fi
           fi
           
-          echo "REAL_OPENWRT_VER=$OPENWRT_VER" >> $GITHUB_ENV
+          # 4. 动态计算 Release 标签名
+          FW_PREFIX="${{ inputs.firmware_type }}"
+          # 如果是 Lede 家族，统一去除版本号
+          if [[ "$FW_PREFIX" == Lede* ]]; then
+            TAG_NAME="${FW_PREFIX}-${{ inputs.build_type }}"
+          else
+            # OpenWrt/ImmortalWrt 把小版本替换成 x
+            if echo "$OPENWRT_VER" | grep -q "\."; then
+              BASE_VER="${OPENWRT_VER%.*}.x"
+            else
+              BASE_VER="$OPENWRT_VER"
+            fi
+            TAG_NAME="${FW_PREFIX}-${BASE_VER}-${{ inputs.build_type }}"
+          fi
+          
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          # 固定标签命名逻辑：源码-版本-目标，不带时间戳，同类固件自动归档在一起
-          tag_name: ${{ inputs.firmware_type }}-${{ env.REAL_OPENWRT_VER }}-${{ inputs.build_type }}
-          name: "🚀 ${{ inputs.firmware_type }} ${{ env.REAL_OPENWRT_VER }} | ${{ inputs.build_type }}"
+          # 使用计算好的规范化 Tag，同类固件自动归档
+          tag_name: ${{ env.TAG_NAME }}
+          name: "🚀 ${{ env.TAG_NAME }}"
           files: release_files/*
