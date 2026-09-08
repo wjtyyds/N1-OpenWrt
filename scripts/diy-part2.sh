@@ -20,13 +20,13 @@ done
 # ==========================================
 # 仅针对 ImmortalWrt 的 Rust 404 专项修复 (暴力替换为官方源码)
 # ==========================================
-if [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
-    echo "为避免 Rust CI 404 报错，正在拉取 OpenWrt 官方 Rust 源码替换..."
-    rm -rf feeds/packages/lang/rust
-    git clone --depth 1 https://github.com/openwrt/packages.git /tmp/openwrt_packages
-    cp -r /tmp/openwrt_packages/lang/rust feeds/packages/lang/
-    rm -rf /tmp/openwrt_packages
-fi
+#if [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
+#    echo "为避免 Rust CI 404 报错，正在拉取 OpenWrt 官方 Rust 源码替换..."
+#    rm -rf feeds/packages/lang/rust
+#    git clone --depth 1 https://github.com/openwrt/packages.git /tmp/openwrt_packages
+#    cp -r /tmp/openwrt_packages/lang/rust feeds/packages/lang/
+#    rm -rf /tmp/openwrt_packages
+#fi
 
 # ==========================================
 # 2. 获取最新 Tag 克隆函数
