@@ -1,0 +1,356 @@
+name: Build N1 Firmware
+run-name: "📦 ${{ inputs.firmware_type }} ${{ inputs.source_branch }} | Kernel ${{ inputs.kernel_version }}-${{ inputs.kernel_builder == 'kernel_stable' && 'stable' || 'flippy' }} | ${{ inputs.build_type }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      firmware_type:
+        description: '选择固件源码'
+        required: true
+        default: 'OpenWrt'
+        type: choice
+        options:
+          - OpenWrt
+          - ImmortalWrt
+          - Lede
+      build_type:
+        description: '编译目标'
+        required: true
+        default: 'Public'
+        type: choice
+        options:
+          - Public
+          - Personal
+      source_branch:
+        description: '填写源码分支或 Tag (若是 lede，可直接填写 Rxx.xx.xx 当作标题)'
+        required: true
+        default: 'v25.12.5'
+      kernel_version:
+        description: '打包内核版本'
+        required: true
+        default: '6.18.49'
+      kernel_builder:
+        description: '选择内核分支'
+        required: true
+        default: 'kernel_flippy'
+        type: choice
+        options:
+          - kernel_flippy
+          - kernel_stable
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Convert inputs to lowercase for scripts
+        run: |
+          echo "FIRMWARE_LOWER=$(echo '${{ inputs.firmware_type }}' | tr 'A-Z' 'a-z')" >> $GITHUB_ENV
+          echo "BUILD_LOWER=$(echo '${{ inputs.build_type }}' | tr 'A-Z' 'a-z')" >> $GITHUB_ENV
+
+      - name: Fast Free Disk Space & Setup Environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          echo "开始极速精准清理磁盘空间..."
+          # 精准爆破占用极大的自带环境，避开 apt 源，彻底杜绝死锁
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/share/swift
+          
+          echo "开始安装核心编译依赖..."
+          sudo -E apt-get -qq update -y
+          sudo -E apt-get -qq install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev file wget curl git libelf-dev p7zip-full
+          sudo -E apt-get -qq autoremove --purge -y
+          sudo -E apt-get -qq clean
+          
+          sudo timedatectl set-timezone "Asia/Shanghai"
+          echo "清理完毕，当前磁盘剩余空间如下："
+          df -h
+
+      - name: Clone Source Code
+        run: |
+          if [ "${{ env.FIRMWARE_LOWER }}" == "openwrt" ]; then
+            git clone --depth 1 -b ${{ inputs.source_branch }} https://github.com/openwrt/openwrt openwrt
+          elif [ "${{ env.FIRMWARE_LOWER }}" == "immortalwrt" ]; then
+            git clone --depth 1 -b ${{ inputs.source_branch }} https://github.com/immortalwrt/immortalwrt openwrt
+          else
+            git clone --depth 1 -b master https://github.com/coolsnowwolf/lede openwrt
+          fi
+
+      - name: Update & Install Feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Load Custom Plugins & Uninstall Conflicts
+        env:
+          FIRMWARE_TYPE: ${{ env.FIRMWARE_LOWER }}
+          BUILD_TYPE: ${{ env.BUILD_LOWER }}
+          PPPOE_USER: ${{ secrets.PPPOE_USER }}
+          PPPOE_PASS: ${{ secrets.PPPOE_PASS }}
+        run: |
+          cd openwrt
+          chmod +x $GITHUB_WORKSPACE/scripts/diy-part2.sh
+          $GITHUB_WORKSPACE/scripts/diy-part2.sh
+
+      - name: Load Configuration
+        run: |
+          cp configs/${{ env.FIRMWARE_LOWER }}.config openwrt/.config
+          
+          sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=512/g' openwrt/.config
+          grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=512" >> openwrt/.config
+          
+          if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
+              sed -i '/CONFIG_PACKAGE_luci-app-dockerman=y/d' openwrt/.config
+              sed -i '/CONFIG_PACKAGE_luci-lib-docker=y/d' openwrt/.config
+              sed -i '/CONFIG_PACKAGE_docker=y/d' openwrt/.config
+              sed -i '/CONFIG_PACKAGE_dockerd=y/d' openwrt/.config
+              sed -i '/CONFIG_PACKAGE_containerd=y/d' openwrt/.config
+              sed -i '/CONFIG_PACKAGE_runc=y/d' openwrt/.config
+              sed -i '/CONFIG_DOCKER_NET_MACVLAN=y/d' openwrt/.config
+              sed -i '/CONFIG_DOCKER_STO_EXT4=y/d' openwrt/.config
+          fi
+          
+          cd openwrt
+          make defconfig
+
+      - name: Download Package & Compile
+        run: |
+          cd openwrt
+          make download -j8
+          make -j$(nproc) || make -j1 || make -j1 V=s
+
+      - name: Package Firmware & Inject Private Mods
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_TOKEN }}
+          PRIVATE_REPO: ${{ secrets.PRIVATE_REPO }}
+        run: |
+          git clone https://github.com/unifreq/openwrt_packit packit
+          cd packit
+          sudo mkdir -p /opt/kernel
+          sudo chown -R $USER:$GROUPS /opt/kernel
+          
+          if [ "${{ inputs.kernel_builder }}" == "kernel_stable" ]; then
+            KERNEL_EXT=".tar.gz"; TAR_CMD="tar -xzf"
+          else
+            KERNEL_EXT=".tar"; TAR_CMD="tar -xf"
+          fi
+          wget "https://github.com/wjtyyds/amlogic-s9xxx-armbian/releases/download/${{ inputs.kernel_builder }}/${{ inputs.kernel_version }}${KERNEL_EXT}"
+          $TAR_CMD ${{ inputs.kernel_version }}${KERNEL_EXT} -C /opt/kernel/
+          if [ "${{ inputs.kernel_builder }}" == "kernel_stable" ]; then
+            sudo mv /opt/kernel/${{ inputs.kernel_version }}/* /opt/kernel/
+          fi
+          REAL_KERNEL_VER=$(ls /opt/kernel/boot-* | head -n 1 | sed -e 's|.*/boot-||' -e 's/\.tar\.gz//' -e 's/\.tar//')
+          
+          if [ "${{ env.FIRMWARE_LOWER }}" == "lede" ]; then
+            if [ "${{ inputs.source_branch }}" != "master" ]; then
+              OPENWRT_VER="${{ inputs.source_branch }}"
+            else
+              OPENWRT_VER="R$(date +%y.%m.%d)"
+            fi
+          else
+            OPENWRT_VER="${{ inputs.source_branch }}"
+          fi
+          
+          echo "KERNEL_VERSION=$REAL_KERNEL_VER" >> make.env
+          echo "OPENWRT_VER=$OPENWRT_VER" >> make.env
+          
+          if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
+            echo "WHOAMI=${{ github.repository_owner }}" >> make.env
+          fi
+          
+          ROOTFS_FILE=$(find ../openwrt/bin/targets/ -type f -name "*-rootfs.tar.gz" | head -n 1)
+          sudo mv "$ROOTFS_FILE" ./openwrt-armvirt-64-default-rootfs.tar.gz
+          
+          mkdir -p inject_tmp/root inject_tmp/etc
+          
+          OAF_UI_VER=$(curl -s "https://api.github.com/repos/destan19/OpenAppFilter/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          if [[ "$OAF_UI_VER" == v7* ]]; then
+              OAF_KMOD_TAG="OAF_Kmods_v7.0.1"
+          else
+              OAF_KMOD_TAG="OAF_Kmods_v6.1.8"
+          fi
+          
+          # 1. 尝试从机密私有仓库拉取 OAF (使用环境变量隐去仓库名，防失败打断)
+          if [ -n "$PRIVATE_REPO" ]; then
+              gh release download "$OAF_KMOD_TAG" -R "$PRIVATE_REPO" -p "oaf-${REAL_KERNEL_VER}.tar.gz" --clobber > /dev/null 2>&1 || true
+          fi
+          
+          # 2. 如果拉取失败，尝试从 auto_import 寻找精确匹配当前内核版本的 OAF
+          if [ ! -f "oaf-${REAL_KERNEL_VER}.tar.gz" ]; then
+              if [ -f "../auto_import/oaf-${REAL_KERNEL_VER}.tar.gz" ]; then
+                  cp "../auto_import/oaf-${REAL_KERNEL_VER}.tar.gz" ./ || true
+              fi
+          fi
+          
+          # 3. 解压并注入 OAF (添加 || true 防止解压/移动失败导致流水线中断)
+          if [ -f "oaf-${REAL_KERNEL_VER}.tar.gz" ]; then
+              tar -xzf "oaf-${REAL_KERNEL_VER}.tar.gz" -C inject_tmp/root/ 2>/dev/null || true
+              find inject_tmp/root/ -type f -name "oaf.ko" -exec mv {} inject_tmp/root/oaf.ko \; 2>/dev/null || true
+              find inject_tmp/root/ -type d -empty -delete 2>/dev/null || true
+          else
+              echo "提示：未找到 oaf-${REAL_KERNEL_VER}.tar.gz，跳过 OAF 模块注入。"
+          fi
+          
+          if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
+              if [ -n "$PRIVATE_REPO" ]; then
+                  mkdir -p inject_tmp/root/private_conf
+                  gh release download "Private-Configs" -R "$PRIVATE_REPO" -p "private_config.zip" --clobber > /dev/null 2>&1 || true
+          
+                  if [ -f "private_config.zip" ]; then
+                      unzip -q "private_config.zip" -d inject_tmp/root/private_conf/ || true
+          
+                      if [ -f "inject_tmp/root/private_conf/AdGuardHome.yaml" ]; then
+                          mv inject_tmp/root/private_conf/AdGuardHome.yaml inject_tmp/root/AdGuardHome.yaml_tmp || true
+                      fi
+          
+                      # 提取私有版的 AdGuardHome 与 lucky 核心，增加防失败处理
+                      if [ -f "inject_tmp/root/private_conf/AdGuardHome" ]; then
+                          mv inject_tmp/root/private_conf/AdGuardHome inject_tmp/root/AdGuardHome_tmp || true
+                      fi
+                      if [ -f "inject_tmp/root/private_conf/lucky" ]; then
+                          mv inject_tmp/root/private_conf/lucky inject_tmp/root/lucky_tmp || true
+                      fi
+          
+                      mkdir -p inject_tmp/etc/config/lucky.daji
+                      mv inject_tmp/root/private_conf/* inject_tmp/etc/config/lucky.daji/ 2>/dev/null || true
+          
+                      rm -rf inject_tmp/root/private_conf private_config.zip
+                  fi
+              else
+                  echo "警告：未配置 PRIVATE_REPO 密钥，跳过私密配置拉取。"
+              fi
+          fi
+          
+          # AdGuardHome 核心注入 (仅限公共版从 auto_import 读取，增加防失败处理)
+          if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
+              if [ -f "../auto_import/AdGuardHome" ]; then
+                  cp "../auto_import/AdGuardHome" "inject_tmp/root/AdGuardHome_tmp" || true
+              fi
+          fi
+          
+          sudo gunzip -f ./openwrt-armvirt-64-default-rootfs.tar.gz
+          
+          cat << 'EOF' > inject_tmp/etc/rc.local
+          # Put your custom commands here that should be executed once
+          # the system init finished. By default this file does nothing.
+          
+          /usr/sbin/balethirq.pl
+          
+          (
+              sleep 3
+              ROOT_DEV=$(mount | grep ' /rom ' | awk '{print $1}')
+              [ -z "$ROOT_DEV" ] && ROOT_DEV=$(mount | grep -E ' / ' | awk '{print $1}')
+          
+              if echo "$ROOT_DEV" | grep -q "mmcblk"; then
+                  if [ -x /etc/init.d/dockerd ]; then
+                      /etc/init.d/dockerd enable
+                      /etc/init.d/dockerd start
+                  fi
+                  if [ -f /root/AdGuardHome_tmp ]; then
+                      mkdir -p /mnt/mmcblk2p4/AdGuardHome
+                      mv /root/AdGuardHome_tmp /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
+                      chmod 755 /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
+                  fi
+              else
+                  if [ -x /etc/init.d/dockerd ]; then
+                      /etc/init.d/dockerd disable
+                      /etc/init.d/dockerd stop 2>/dev/null
+                  fi
+              fi
+          
+              if [ -f /root/AdGuardHome.yaml_tmp ]; then
+                  mv -f /root/AdGuardHome.yaml_tmp /etc/AdGuardHome.yaml
+                  /etc/init.d/AdGuardHome restart 2>/dev/null
+              fi
+          
+              # 统一装配 lucky 核心
+              if [ -f /root/lucky_tmp ]; then
+                  mv -f /root/lucky_tmp /usr/bin/lucky
+                  chmod 755 /usr/bin/lucky
+              fi
+          
+              rm -f /root/lucky_tmp 2>/dev/null
+              /etc/init.d/lucky restart 2>/dev/null
+          
+              echo '# Put your custom commands here that should be executed once' > /etc/rc.local
+              echo '# the system init finished. By default this file does nothing.' >> /etc/rc.local
+              echo '' >> /etc/rc.local
+              echo '/usr/sbin/balethirq.pl' >> /etc/rc.local
+              echo '' >> /etc/rc.local
+              echo 'exit 0' >> /etc/rc.local
+          ) &
+          
+          exit 0
+          EOF
+          chmod +x inject_tmp/etc/rc.local
+          
+          if tar -O -xf ./openwrt-armvirt-64-default-rootfs.tar etc/os-release usr/lib/os-release etc/openwrt_release 2>/dev/null | grep -qiE '^OPENWRT_RELEASE="?LEDE' || tar -tf ./openwrt-armvirt-64-default-rootfs.tar | grep -q -E '^\.?/?root/install-to-emmc.sh$'; then
+              sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar root/install-to-emmc.sh 2>/dev/null || true
+              sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar ./root/install-to-emmc.sh 2>/dev/null || true
+              mkdir -p inject_tmp/root
+              ln -sf /usr/sbin/openwrt-install-amlogic inject_tmp/root/install-to-emmc.sh
+          fi
+          
+          cd inject_tmp
+          sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
+          cd ..
+          sudo gzip -9 ./openwrt-armvirt-64-default-rootfs.tar
+          
+          sudo chmod +x mk_s905d_n1.sh
+          sudo ./mk_s905d_n1.sh
+          
+          sudo gzip -9 output/*.img
+
+      - name: Organize Release Files
+        id: organize
+        env:
+          ZIP_PASS: ${{ secrets.ZIP_PASS }}
+        run: |
+          mkdir release_files
+          
+          source packit/make.env
+          
+          DATETIME=$(date +'%Y%m%d%H%M')
+          FORMATTED_TIME=$(date +'%Y-%m-%d %H:%M')
+          
+          for img in packit/output/*.img.gz; do
+            new_img_name="${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}-k${KERNEL_VERSION}.img.gz"
+            cp "$img" "release_files/$new_img_name"
+          done
+          
+          cp packit/openwrt-armvirt-64-default-rootfs.tar.gz release_files/${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}-rootfs.tar.gz
+          cp openwrt/.config release_files/${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}.config
+          find openwrt/bin/targets/ -name "feeds.buildinfo" -exec cp {} release_files/${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}-feeds.buildinfo \; || true
+          
+          cd release_files
+          sha256sum * > sha256sums.txt
+          
+          if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
+            if [ -z "$ZIP_PASS" ]; then
+              echo "错误：未检测到 ZIP_PASS 密钥！为保护隐私，已强制终止打包。"
+              exit 1
+            fi
+            echo "正在为 Personal 固件进行 7z AES-256 加密打包..."
+            7z a -p"$ZIP_PASS" -mhe=on Personal_Firmware_${DATETIME}.7z *
+            find . -type f -not -name '*.7z' -delete
+          fi
+          
+          echo "DATETIME=$DATETIME" >> $GITHUB_ENV
+          echo "FORMATTED_TIME=$FORMATTED_TIME" >> $GITHUB_ENV
+          echo "REAL_OPENWRT_VER=$OPENWRT_VER" >> $GITHUB_ENV
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ inputs.firmware_type }}_${{ env.REAL_OPENWRT_VER }}_${{ inputs.build_type }}_${{ env.DATETIME }}
+          name: "🚀 ${{ inputs.firmware_type }} ${{ env.REAL_OPENWRT_VER }} | Kernel ${{ inputs.kernel_version }}-${{ inputs.kernel_builder == 'kernel_stable' && 'stable' || 'flippy' }} | ${{ inputs.build_type }}"
+          files: release_files/*
