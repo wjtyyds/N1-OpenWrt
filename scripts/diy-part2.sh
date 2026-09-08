@@ -18,7 +18,7 @@ for plugin in "${conflict_plugins[@]}"; do
 done
 
 # ==========================================
-# 仅针对 ImmortalWrt 的 Rust 404 专项修复 (暴力替换为官方源码)
+# 仅针对 ImmortalWrt v25.12.1 的 Rust 404 专项修复 (暴力替换为官方源码)
 # ==========================================
 #if [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
 #    echo "为避免 Rust CI 404 报错，正在拉取 OpenWrt 官方 Rust 源码替换..."

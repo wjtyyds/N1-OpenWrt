@@ -212,7 +212,7 @@ jobs:
                           mv inject_tmp/root/private_conf/AdGuardHome.yaml inject_tmp/root/AdGuardHome.yaml_tmp || true
                       fi
           
-                      # 提取私有版的 AdGuardHome 与 lucky 核心，增加防失败处理
+                      # 提取私有版的 AdGuardHome 与 lucky 核心
                       if [ -f "inject_tmp/root/private_conf/AdGuardHome" ]; then
                           mv inject_tmp/root/private_conf/AdGuardHome inject_tmp/root/AdGuardHome_tmp || true
                       fi
@@ -220,8 +220,12 @@ jobs:
                           mv inject_tmp/root/private_conf/lucky inject_tmp/root/lucky_tmp || true
                       fi
           
-                      mkdir -p inject_tmp/etc/config/lucky.daji
-                      mv inject_tmp/root/private_conf/* inject_tmp/etc/config/lucky.daji/ 2>/dev/null || true
+                      # 解析并解压 lucky 配置 zip
+                      LUCKY_ZIP=$(ls inject_tmp/root/private_conf/lucky_*.zip 2>/dev/null | head -n 1)
+                      if [ -n "$LUCKY_ZIP" ]; then
+                          mkdir -p inject_tmp/etc/config/lucky.daji
+                          unzip -q -o "$LUCKY_ZIP" -d inject_tmp/etc/config/lucky.daji/ || true
+                      fi
           
                       rm -rf inject_tmp/root/private_conf private_config.zip
                   fi
@@ -320,19 +324,16 @@ jobs:
           source packit/make.env
           
           DATETIME=$(date +'%Y%m%d%H%M')
-          FORMATTED_TIME=$(date +'%Y-%m-%d %H:%M')
           
           for img in packit/output/*.img.gz; do
-            new_img_name="${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}-k${KERNEL_VERSION}.img.gz"
+            # 为 img.gz 拼装带时间戳的新名字
+            new_img_name="${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}-k${KERNEL_VERSION}-${DATETIME}.img.gz"
             cp "$img" "release_files/$new_img_name"
+            # 记录基础名字，用于生成同名的 7z
+            base_name="${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}-k${KERNEL_VERSION}-${DATETIME}"
           done
           
-          cp packit/openwrt-armvirt-64-default-rootfs.tar.gz release_files/${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}-rootfs.tar.gz
-          cp openwrt/.config release_files/${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}.config
-          find openwrt/bin/targets/ -name "feeds.buildinfo" -exec cp {} release_files/${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}-feeds.buildinfo \; || true
-          
           cd release_files
-          sha256sum * > sha256sums.txt
           
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
             if [ -z "$ZIP_PASS" ]; then
@@ -340,17 +341,18 @@ jobs:
               exit 1
             fi
             echo "正在为 Personal 固件进行 7z AES-256 加密打包..."
-            7z a -p"$ZIP_PASS" -mhe=on Personal_Firmware_${DATETIME}.7z *
+            # 生成同名 7z 包并将 img.gz 打入其中
+            7z a -p"$ZIP_PASS" -mhe=on "${base_name}.7z" *.img.gz
+            # 清除源 img.gz 保证最终只发布单个加密 7z 文件
             find . -type f -not -name '*.7z' -delete
           fi
           
-          echo "DATETIME=$DATETIME" >> $GITHUB_ENV
-          echo "FORMATTED_TIME=$FORMATTED_TIME" >> $GITHUB_ENV
           echo "REAL_OPENWRT_VER=$OPENWRT_VER" >> $GITHUB_ENV
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ inputs.firmware_type }}_${{ env.REAL_OPENWRT_VER }}_${{ inputs.build_type }}_${{ env.DATETIME }}
-          name: "🚀 ${{ inputs.firmware_type }} ${{ env.REAL_OPENWRT_VER }} | Kernel ${{ inputs.kernel_version }}-${{ inputs.kernel_builder == 'kernel_stable' && 'stable' || 'flippy' }} | ${{ inputs.build_type }}"
+          # 固定标签命名逻辑：源码-版本-目标，不带时间戳，同类固件自动归档在一起
+          tag_name: ${{ inputs.firmware_type }}-${{ env.REAL_OPENWRT_VER }}-${{ inputs.build_type }}
+          name: "🚀 ${{ inputs.firmware_type }} ${{ env.REAL_OPENWRT_VER }} | ${{ inputs.build_type }}"
           files: release_files/*
