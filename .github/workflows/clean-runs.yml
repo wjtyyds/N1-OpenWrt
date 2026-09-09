@@ -1,21 +1,23 @@
 name: Clean Stopped Runs
 on:
-  workflow_dispatch: # 允许手动点击按钮触发
+  workflow_dispatch:
 
 jobs:
   cleanup:
     runs-on: ubuntu-latest
     permissions:
-      actions: write # 赋予删除工作流记录的核心权限
+      actions: write
     steps:
+      # 【核心修复】：必须先 Checkout 代码，让环境里有 .git 目录，gh 命令才能认得路！
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
       - name: 🗑️ Delete Completed, Failed, or Cancelled Runs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "🔍 开始扫描流水线记录..."
           
-          # 获取所有状态为 "completed" (已结束) 的记录 ID，上限 100 条
-          # 这会自动避开 "in_progress" (进行中) 和 "queued" (排队中) 的任务
           run_ids=$(gh run list --limit 100 --json databaseId,status --jq '.[] | select(.status == "completed") | .databaseId')
           
           if [ -z "$run_ids" ]; then
