@@ -62,24 +62,30 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          echo "开始物理清理，腾出 30G 空间..."
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          echo "开始物理清理，腾出空间..."
           docker rmi -f $(docker images -q) 2>/dev/null || true
+          [[ -n "${AGENT_TOOLSDIRECTORY}" ]] && sudo rm -rf "${AGENT_TOOLSDIRECTORY}"
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android 2>/dev/null
+          sudo swapoff -a
+          sudo rm -f /swapfile /mnt/swapfile
           
-          echo "更新软件源..."
-          sudo -E apt-get -qq update -y
+          echo "更新软件源并清理大型无用包 (Ophub 稳定逻辑)..."
+          sudo apt-get -y update
+          sudo apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
           
-          echo "安装核心依赖 (采用日志重定向金蝉脱壳法，彻底切断幽灵进程挂起)..."
-          # 【绝杀技】：把安装过程全部重定向到 apt.log，就算有后台服务被唤醒，也挟持不了当前的流水线进程！
-          sudo -E apt-get -y install build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev file wget curl git libelf-dev p7zip-full > apt.log 2>&1
+          echo "安装核心依赖 (采用 Ophub 的 24.04 动态依赖列表)..."
+          # 自动获取并安装适配 24.04 的依赖，完美避开旧包名引发的 code 100 报错
+          sudo apt-get -y install $(curl -fsSL https://ophub.org/ubuntu2404-make-openwrt-depends)
           
-          # 脚本瞬间解放，再安全地把刚才的安装日志打印出来给你看
-          cat apt.log
+          echo "重载系统守护进程 (防假死核心)..."
+          sudo systemctl daemon-reload
           
-          sudo -E apt-get -qq clean
+          echo "清理缓存..."
+          sudo apt-get -y autoremove --purge
+          sudo apt-get clean
+          
           sudo timedatectl set-timezone "Asia/Shanghai"
-          
-          echo "✅ 环境安装完毕，彻底告别假死！当前磁盘剩余空间："
+          echo "✅ 环境安装完毕！当前磁盘剩余空间："
           df -h
 
       - name: Clone Source Code
