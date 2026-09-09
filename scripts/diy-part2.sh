@@ -121,7 +121,7 @@ if [ -f /root/oaf.ko ]; then
 fi
 EOF
 
-if [ "$FIRMWARE_TYPE" == "lede" ]; then
+if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     cat << 'EOF' >> ${FILES_DIR}/etc/uci-defaults/99_custom_setup
 # B. 修复 UHTTPD HTTPS (仅限 Lede 固件)
 uci delete uhttpd.main.listen_https 2>/dev/null
