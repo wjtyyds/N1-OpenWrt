@@ -58,16 +58,16 @@ jobs:
           echo "FIRMWARE_LOWER=$(echo '${{ inputs.firmware_type }}' | tr 'A-Z' 'a-z')" >> $GITHUB_ENV
           echo "BUILD_LOWER=$(echo '${{ inputs.build_type }}' | tr 'A-Z' 'a-z')" >> $GITHUB_ENV
 
-      - name: Free Disk Space (Light)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          dotnet: false
-          android: false
-          haskell: false
-          docker-images: true
-          swap-storage: true
-          large-packages: false
-          tool-cache: false
+#      - name: Free Disk Space (Light)
+#        uses: jlumbroso/free-disk-space@main
+#        with:
+#          dotnet: false
+#          android: false
+#          haskell: false
+#          docker-images: true
+#          swap-storage: true
+#          large-packages: false
+#          tool-cache: false
 
       - name: Setup Build Environment
         env:
