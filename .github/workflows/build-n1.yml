@@ -58,19 +58,14 @@ jobs:
           echo "FIRMWARE_LOWER=$(echo '${{ inputs.firmware_type }}' | tr 'A-Z' 'a-z')" >> $GITHUB_ENV
           echo "BUILD_LOWER=$(echo '${{ inputs.build_type }}' | tr 'A-Z' 'a-z')" >> $GITHUB_ENV
 
-      # 采用专业的磁盘清理 Action，精准控制 IOPS，杜绝手动 rm 导致的磁盘假死
-      - name: Free Disk Space (Safe Mode)
+      - name: Free Disk Space (Light)
         uses: jlumbroso/free-disk-space@main
         with:
-          # 以下三大件直接腾出 25GB+
-          dotnet: true
-          android: true
-          haskell: true
-          # 瞬间删除层级镜像，释放 10GB+ (0 读写损耗)
+          dotnet: false
+          android: false
+          haskell: false
           docker-images: true
-          # 瞬间删除 4GB 虚拟内存单文件 (0 读写损耗)
           swap-storage: true
-          # 【绝对禁止】开启危险的大软件包清理，防止弄崩网络和后续依赖！
           large-packages: false
           tool-cache: false
 
