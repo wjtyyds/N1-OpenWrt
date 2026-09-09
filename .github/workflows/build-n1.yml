@@ -83,8 +83,6 @@ jobs:
           sudo apt-get clean
           
           sudo timedatectl set-timezone "Asia/Shanghai"
-          echo "环境初始化完毕，当前磁盘剩余空间："
-          df -h
 
       - name: Clone Source Code
         run: |
