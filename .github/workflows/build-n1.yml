@@ -62,22 +62,30 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          echo "开始极速精准清理磁盘空间..."
-          # 精准爆破占用极大的自带环境，避开 apt 源，彻底杜绝死锁
+          echo "🛑 停止后台更新服务，防止 apt 进程锁死..."
+          sudo systemctl stop unattended-upgrades || true
+          sudo systemctl disable unattended-upgrades || true
+          sudo pkill -9 apt || true
+          
+          echo "🧹 开始极速精准清理磁盘空间..."
+          # 物理爆破占用极大且对编译无用的自带环境，坚决避开 apt 卸载机制
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
           sudo rm -rf /usr/local/share/boost
           sudo rm -rf /usr/share/swift
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force || true
           
-          echo "开始安装核心编译依赖..."
+          echo "📦 开始安装核心编译依赖..."
           sudo -E apt-get -qq update -y
           sudo -E apt-get -qq install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev file wget curl git libelf-dev p7zip-full
-          sudo -E apt-get -qq autoremove --purge -y
+          
+          echo "🗑️ 清理 apt 缓存..."
           sudo -E apt-get -qq clean
           
           sudo timedatectl set-timezone "Asia/Shanghai"
-          echo "清理完毕，当前磁盘剩余空间如下："
+          echo "✅ 环境准备完毕，当前磁盘剩余空间如下："
           df -h
 
       - name: Clone Source Code
