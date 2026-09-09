@@ -1,0 +1,32 @@
+name: Clean Stopped Runs
+on:
+  workflow_dispatch: # 允许手动点击按钮触发
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write # 赋予删除工作流记录的核心权限
+    steps:
+      - name: 🗑️ Delete Completed, Failed, or Cancelled Runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔍 开始扫描流水线记录..."
+          
+          # 获取所有状态为 "completed" (已结束) 的记录 ID，上限 100 条
+          # 这会自动避开 "in_progress" (进行中) 和 "queued" (排队中) 的任务
+          run_ids=$(gh run list --limit 100 --json databaseId,status --jq '.[] | select(.status == "completed") | .databaseId')
+          
+          if [ -z "$run_ids" ]; then
+            echo "🎉 没有找到需要清理的停止记录，当前很干净！"
+            exit 0
+          fi
+          
+          echo "开始执行删除操作："
+          for id in $run_ids; do
+            echo "正在删除已停止的记录 ID: $id"
+            gh run delete $id || true
+          done
+          
+          echo "✅ 清理完成！正在运行的任务毫发无损。"
