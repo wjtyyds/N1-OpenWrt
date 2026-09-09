@@ -29,7 +29,7 @@ on:
       kernel_version:
         description: '打包内核版本'
         required: true
-        default: '6.18.49'
+        default: '6.18.50'
       kernel_builder:
         description: '选择内核分支'
         required: true
@@ -58,27 +58,27 @@ jobs:
           echo "FIRMWARE_LOWER=$(echo '${{ inputs.firmware_type }}' | tr 'A-Z' 'a-z')" >> $GITHUB_ENV
           echo "BUILD_LOWER=$(echo '${{ inputs.build_type }}' | tr 'A-Z' 'a-z')" >> $GITHUB_ENV
 
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          # 使用最稳妥的开源清理插件，绝对不会搞崩底层环境
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: true
-
-      - name: Setup Build Environment
+      - name: Fast Free Disk Space & Setup Environment
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          echo "开始极速精准清理磁盘空间 (物理安全版)..."
+          # 仅物理删除大块头无用环境。绝对不碰 apt autoremove，防止破坏 GitHub Runner 核心进程导致步骤错乱！
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          
           echo "开始安装核心编译依赖..."
           sudo -E apt-get -qq update -y
           sudo -E apt-get -qq install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev file wget curl git libelf-dev p7zip-full
           sudo -E apt-get -qq clean
+          
           sudo timedatectl set-timezone "Asia/Shanghai"
+          echo "清理完毕，当前磁盘剩余空间如下："
+          df -h
 
       - name: Clone Source Code
         run: |
@@ -185,7 +185,7 @@ jobs:
               OAF_KMOD_TAG="OAF_Kmods_v6.1.8"
           fi
           
-          # 1. 尝试从机密私有仓库拉取 OAF
+          # 1. 尝试从机密私有仓库拉取 OAF (使用环境变量隐去仓库名，防失败打断)
           if [ -n "$PRIVATE_REPO" ]; then
               gh release download "$OAF_KMOD_TAG" -R "$PRIVATE_REPO" -p "oaf-${REAL_KERNEL_VER}.tar.gz" --clobber > /dev/null 2>&1 || true
           fi
@@ -197,7 +197,7 @@ jobs:
               fi
           fi
           
-          # 3. 解压并注入 OAF
+          # 3. 解压并注入 OAF (添加 || true 防止解压/移动失败导致流水线中断)
           if [ -f "oaf-${REAL_KERNEL_VER}.tar.gz" ]; then
               tar -xzf "oaf-${REAL_KERNEL_VER}.tar.gz" -C inject_tmp/root/ 2>/dev/null || true
               find inject_tmp/root/ -type f -name "oaf.ko" -exec mv {} inject_tmp/root/oaf.ko \; 2>/dev/null || true
@@ -240,7 +240,7 @@ jobs:
               fi
           fi
           
-          # AdGuardHome 核心注入 (仅限公共版)
+          # AdGuardHome 核心注入 (仅限公共版从 auto_import 读取，增加防失败处理)
           if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
               if [ -f "../auto_import/AdGuardHome" ]; then
                   cp "../auto_import/AdGuardHome" "inject_tmp/root/AdGuardHome_tmp" || true
@@ -338,7 +338,7 @@ jobs:
             cp "$img" "release_files/$new_img_name"
           done
           
-          # 2. config 文件输出控制
+          # 2. config 文件输出控制 (开启则复制 config 到发布目录)
           if [ "${{ inputs.export_config }}" == "true" ]; then
             cp openwrt/.config "release_files/${base_name}.config"
           fi
@@ -352,12 +352,16 @@ jobs:
               exit 1
             fi
             echo "正在为 Personal 固件进行 7z AES-256 加密打包..."
+            # 生成加密的 7z，如果含有 config 也会一并卷入
             7z a -p"$ZIP_PASS" -mhe=on "${base_name}.7z" *
+            # 清理所有未加密的源文件
             find . -type f -not -name '*.7z' -delete
           else
             if [ "${{ inputs.export_config }}" == "true" ]; then
               echo "公共版开启了 config 导出，正在打包为无密码的 7z 压缩包..."
+              # 生成无密码的 7z，将 img.gz 和 config 一并卷入
               7z a "${base_name}.7z" *
+              # 打包后清理散落的文件
               find . -type f -not -name '*.7z' -delete
             fi
           fi
