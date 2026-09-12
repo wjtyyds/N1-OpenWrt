@@ -109,6 +109,7 @@ jobs:
         env:
           FIRMWARE_TYPE: ${{ env.FIRMWARE_LOWER }}
           BUILD_TYPE: ${{ env.BUILD_LOWER }}
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
           PPPOE_USER: ${{ secrets.PPPOE_USER }}
           PPPOE_PASS: ${{ secrets.PPPOE_PASS }}
         run: |
