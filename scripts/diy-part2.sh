@@ -9,7 +9,7 @@ conflict_plugins=(
     "luci-app-openclash" "openclash"
     "oaf" "kmod-oaf" "appfilter" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
     "lucky" "luci-app-lucky"
-    "luci-app-dockerman"
+    # "luci-app-dockerman" # 【改动1】：注释掉此行，不再卸载源码自带的 dockerman
 )
 for plugin in "${conflict_plugins[@]}"; do
     ./scripts/feeds uninstall "$plugin" || true
@@ -38,7 +38,7 @@ clone_latest_tag() {
     local dest_dir=$2
     local api_url="https://api.github.com/repos/${repo_url#https://github.com/}/releases/latest"
     local latest_tag=$(curl -s "$api_url" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    
+
     if [ -n "$latest_tag" ]; then
         git clone --branch "$latest_tag" --depth 1 "$repo_url" "package/custom/$dest_dir"
     else
@@ -49,7 +49,8 @@ clone_latest_tag() {
 mkdir -p package/custom
 
 # 拉取普通插件
-clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
+# clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora" # 【改动2】：注释掉按 Tag 拉取
+git clone --depth 1 https://github.com/eamonxg/luci-theme-aurora.git package/custom/luci-theme-aurora # 【改动2】：新增直接拉取 master 最新源码（包含作者修复的错位问题）
 clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
 clone_latest_tag "https://github.com/gdy666/luci-app-lucky" "lucky"
 clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
@@ -77,8 +78,9 @@ git clone https://github.com/sirpdboy/luci-app-adguardhome.git package/custom/lu
 # --- 动态判断是否需要拉取 Docker 相关组件 ---
 if [ "$BUILD_TYPE" == "public" ]; then
     echo "【公共版】：开始拉取 Docker 与 Dockerman 组件..."
-    git clone --depth 1 https://github.com/wjtyyds/luci-app-dockerman.git package/custom/luci-app-dockerman
-    git clone --depth 1 https://github.com/wjtyyds/luci-lib-docker.git package/custom/luci-lib-docker
+    # 【改动3】：注释掉你的个人仓库拉取，这样编译时会自动使用源码包自带的 dockerman 和 lib-docker
+    # git clone --depth 1 https://github.com/wjtyyds/luci-app-dockerman.git package/custom/luci-app-dockerman
+    # git clone --depth 1 https://github.com/wjtyyds/luci-lib-docker.git package/custom/luci-lib-docker
 else
     echo "【私有版】：无需 Docker，跳过相关组件拉取..."
 fi
