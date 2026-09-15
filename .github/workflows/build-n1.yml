@@ -122,14 +122,21 @@ jobs:
           grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=512" >> openwrt/.config
           
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
+              # 剔除 Dockerman 及 Docker 组件
               sed -i '/CONFIG_PACKAGE_luci-app-dockerman=y/d' openwrt/.config
               sed -i '/CONFIG_PACKAGE_luci-lib-docker=y/d' openwrt/.config
               sed -i '/CONFIG_PACKAGE_docker=y/d' openwrt/.config
+              sed -i '/CONFIG_PACKAGE_docker-compose=y/d' openwrt/.config
               sed -i '/CONFIG_PACKAGE_dockerd=y/d' openwrt/.config
               sed -i '/CONFIG_PACKAGE_containerd=y/d' openwrt/.config
               sed -i '/CONFIG_PACKAGE_runc=y/d' openwrt/.config
               sed -i '/CONFIG_DOCKER_NET_MACVLAN=y/d' openwrt/.config
               sed -i '/CONFIG_DOCKER_STO_EXT4=y/d' openwrt/.config
+          
+              # 剔除 Passwall 及其关联配置
+              sed -i '/CONFIG_PACKAGE_luci-app-passwall=y/d' openwrt/.config
+              sed -i '/CONFIG_PACKAGE_luci-app-passwall_/d' openwrt/.config
+              sed -i '/CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y/d' openwrt/.config
           fi
           
           cd openwrt
