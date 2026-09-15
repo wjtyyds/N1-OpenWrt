@@ -12,8 +12,7 @@ on:
         options:
           - OpenWrt
           - ImmortalWrt
-          - Lede-Armsr
-          - Lede-Amlogic
+          - Lede
       build_type:
         description: '编译目标'
         required: true
@@ -29,7 +28,7 @@ on:
       kernel_version:
         description: '打包内核版本'
         required: true
-        default: '6.18.49'
+        default: '6.18.52'
       kernel_builder:
         description: '选择内核分支'
         required: true
@@ -46,7 +45,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04  # 【核心升级】：紧跟 Ophub 升级到 24.04，避开 22.04 恶性 Bug
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
@@ -74,7 +73,6 @@ jobs:
           sudo apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
           
           echo "安装核心依赖 (采用 Ophub 的 24.04 动态依赖列表)..."
-          # 自动获取并安装适配 24.04 的依赖，完美避开旧包名引发的 code 100 报错
           sudo apt-get -y install $(curl -fsSL https://ophub.org/ubuntu2404-make-openwrt-depends)
           
           echo "重载系统守护进程 (防假死核心)..."
@@ -102,7 +100,6 @@ jobs:
         run: |
           cd openwrt
           ./scripts/feeds update -a
-          # 强行屏蔽交互
           ./scripts/feeds install -a -f < /dev/null
 
       - name: Load Custom Plugins & Uninstall Conflicts
@@ -195,19 +192,16 @@ jobs:
               OAF_KMOD_TAG="OAF_Kmods_v6.1.8"
           fi
           
-          # 1. 尝试从机密私有仓库拉取 OAF
           if [ -n "$PRIVATE_REPO" ]; then
               gh release download "$OAF_KMOD_TAG" -R "$PRIVATE_REPO" -p "oaf-${REAL_KERNEL_VER}.tar.gz" --clobber > /dev/null 2>&1 || true
           fi
           
-          # 2. 如果拉取失败，尝试从 auto_import 寻找精确匹配当前内核版本的 OAF
           if [ ! -f "oaf-${REAL_KERNEL_VER}.tar.gz" ]; then
               if [ -f "../auto_import/oaf-${REAL_KERNEL_VER}.tar.gz" ]; then
                   cp "../auto_import/oaf-${REAL_KERNEL_VER}.tar.gz" ./ || true
               fi
           fi
           
-          # 3. 解压并注入 OAF
           if [ -f "oaf-${REAL_KERNEL_VER}.tar.gz" ]; then
               tar -xzf "oaf-${REAL_KERNEL_VER}.tar.gz" -C inject_tmp/root/ 2>/dev/null || true
               find inject_tmp/root/ -type f -name "oaf.ko" -exec mv {} inject_tmp/root/oaf.ko \; 2>/dev/null || true
@@ -228,7 +222,6 @@ jobs:
                           mv inject_tmp/root/private_conf/AdGuardHome.yaml inject_tmp/root/AdGuardHome.yaml_tmp || true
                       fi
           
-                      # 提取私有版的 AdGuardHome 与 lucky 核心
                       if [ -f "inject_tmp/root/private_conf/AdGuardHome" ]; then
                           mv inject_tmp/root/private_conf/AdGuardHome inject_tmp/root/AdGuardHome_tmp || true
                       fi
@@ -236,7 +229,6 @@ jobs:
                           mv inject_tmp/root/private_conf/lucky inject_tmp/root/lucky_tmp || true
                       fi
           
-                      # 解析并解压 lucky 配置 zip
                       LUCKY_ZIP=$(ls inject_tmp/root/private_conf/lucky_*.zip 2>/dev/null | head -n 1)
                       if [ -n "$LUCKY_ZIP" ]; then
                           mkdir -p inject_tmp/etc/config/lucky.daji
@@ -250,7 +242,6 @@ jobs:
               fi
           fi
           
-          # AdGuardHome 核心注入 (仅限公共版)
           if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
               if [ -f "../auto_import/AdGuardHome" ]; then
                   cp "../auto_import/AdGuardHome" "inject_tmp/root/AdGuardHome_tmp" || true
@@ -292,7 +283,6 @@ jobs:
                   /etc/init.d/AdGuardHome restart 2>/dev/null
               fi
           
-              # 统一装配 lucky 核心
               if [ -f /root/lucky_tmp ]; then
                   mv -f /root/lucky_tmp /usr/bin/lucky
                   chmod 755 /usr/bin/lucky
@@ -341,21 +331,18 @@ jobs:
           
           DATETIME=$(date +'%Y%m%d%H%M')
           
-          # 1. 过滤并重命名打包输出的核心固件 img.gz
           for img in packit/output/*.img.gz; do
             base_name="${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}-k${KERNEL_VERSION}-${DATETIME}"
             new_img_name="${base_name}.img.gz"
             cp "$img" "release_files/$new_img_name"
           done
           
-          # 2. config 文件输出控制
           if [ "${{ inputs.export_config }}" == "true" ]; then
             cp openwrt/.config "release_files/${base_name}.config"
           fi
           
           cd release_files
           
-          # 3. 隔离打包逻辑：私有强制加密 vs 公共无密打包
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
             if [ -z "$ZIP_PASS" ]; then
               echo "错误：未检测到 ZIP_PASS 密钥！为保护隐私，已强制终止打包。"
@@ -372,14 +359,11 @@ jobs:
             fi
           fi
           
-          # 4. 动态计算 Release 标签名
           FW_PREFIX="${{ inputs.firmware_type }}"
           
-          # 如果是 Lede 家族，统一去除版本号
           if [[ "$FW_PREFIX" == Lede* ]]; then
             TAG_NAME="${FW_PREFIX}-${{ inputs.build_type }}"
           else
-            # OpenWrt/ImmortalWrt 把小版本替换成 x
             if [[ "$OPENWRT_VER" == *.* ]]; then
               BASE_VER="${OPENWRT_VER%.*}.x"
             else
