@@ -1,0 +1,38 @@
+用它自带的
+diskman
+dockerman
+
+要卸载的
+adguardhome
+appfliter
+lucky
+openclash
+passwall
+
+
+
+./scripts/feeds uninstall adguardhome luci-app-adguardhome luci-app-openclash openclash oaf kmod-oaf appfilter luci-app-appfilter openappfilter luci-app-openappfilter open-app-filter lucky luci-app-lucky passwall luci-app-passwall
+
+# 移除 openwrt feeds 自带的核心库
+rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
+
+# 移除 openwrt feeds 过时的luci版本
+rm -rf feeds/luci/applications/luci-app-passwall
+
+
+用我拉取的源的
+adguardhome
+lucky
+oaf
+openclash
+passwall
+aurora
+aurora-config
+
+git clone https://github.com/sirpdboy/luci-app-adguardhome.git package/luci-app-adguardhome
+git clone --depth 1 https://github.com/eamonxg/luci-theme-aurora.git package/luci-theme-aurora
+git clone --branch v1.2.0 --depth 1 https://github.com/eamonxg/luci-app-aurora-config.git package/luci-app-aurora-config
+git clone --branch v2.19.5 --depth 1 https://github.com/gdy666/luci-app-lucky.git package/lucky
+git clone --branch v7.0.1 --depth 1 https://github.com/destan19/OpenAppFilter.git package/luci-app-oaf
+git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/passwall-packages
+git clone --branch 26.9.9-1 --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall package/passwall-luci
