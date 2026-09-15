@@ -2,36 +2,7 @@
 # diy-part2.sh
 
 # ==========================================
-# 1. 斩断内置冲突插件
-# ==========================================
-conflict_plugins=(
-    "adguardhome" "luci-app-adguardhome"
-    "luci-app-openclash" "openclash"
-    "oaf" "kmod-oaf" "appfilter" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
-    "lucky" "luci-app-lucky"
-    # "luci-app-dockerman" # 【改动1】：注释掉此行，不再卸载源码自带的 dockerman
-)
-for plugin in "${conflict_plugins[@]}"; do
-    ./scripts/feeds uninstall "$plugin" || true
-    rm -rf feeds/packages/*/*/"$plugin"
-    rm -rf feeds/luci/*/*/"$plugin"
-done
-
-# ==========================================
-# 仅针对 ImmortalWrt v25.12.1 的 Rust 404 专项修复 (暴力替换为官方源码)
-# ==========================================
-if [ "$FIRMWARE_TYPE" == "immortalwrt" ] && [ "$SOURCE_BRANCH" == "v25.12.1" ]; then
-    echo "检测到正在编译 ImmortalWrt v25.12.1，为避免 Rust CI 404 报错，正在拉取 OpenWrt 官方 Rust 源码替换..."
-    rm -rf feeds/packages/lang/rust
-    git clone --depth 1 https://github.com/openwrt/packages.git /tmp/openwrt_packages
-    cp -r /tmp/openwrt_packages/lang/rust feeds/packages/lang/
-    rm -rf /tmp/openwrt_packages
-else
-    echo "当前版本 ($SOURCE_BRANCH) 无需执行 Rust 404 修复，已跳过。"
-fi
-
-# ==========================================
-# 2. 获取最新 Tag 克隆函数
+# 0. 获取最新 Tag 克隆函数
 # ==========================================
 clone_latest_tag() {
     local repo_url=$1
@@ -40,56 +11,111 @@ clone_latest_tag() {
     local latest_tag=$(curl -s "$api_url" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
     if [ -n "$latest_tag" ]; then
+        echo "发现最新 Tag: $latest_tag，正在克隆..."
         git clone --branch "$latest_tag" --depth 1 "$repo_url" "package/custom/$dest_dir"
     else
+        echo "未发现 Release Tag，拉取默认分支最新代码..."
         git clone --depth 1 "$repo_url" "package/custom/$dest_dir"
     fi
 }
 
 mkdir -p package/custom
 
-# 拉取普通插件
-# clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora" # 【改动2】：注释掉按 Tag 拉取
-git clone --depth 1 https://github.com/eamonxg/luci-theme-aurora.git package/custom/luci-theme-aurora # 【改动2】：新增直接拉取 master 最新源码（包含作者修复的错位问题）
-clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
-clone_latest_tag "https://github.com/gdy666/luci-app-lucky" "lucky"
-clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
+# ==========================================
+# 1. 核心大分流：各源码隔离操作 (插件卸载与拉取)
+# ==========================================
 
-# 稀疏克隆 OpenClash
-OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
-OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-mkdir -p /tmp/OpenClash && cd /tmp/OpenClash
-git init
-git remote add origin "$OPENCLASH_REPO"
-git config core.sparseCheckout true
-echo "luci-app-openclash/*" >> .git/info/sparse-checkout
-if [ -n "$OPENCLASH_TAG" ]; then
-    git pull --depth 1 origin "$OPENCLASH_TAG"
-else
-    git pull --depth 1 origin master
+# ----------------- [ LEDE 源码专属逻辑 ] -----------------
+if [[ "$FIRMWARE_TYPE" == lede* ]]; then
+    echo "====== 开始执行 LEDE 专属定制 ======"
+
+    # 1. 斩断内置冲突插件
+    lede_conflict_plugins=(
+        "adguardhome" "luci-app-adguardhome"
+        "luci-app-openclash" "openclash"
+        "oaf" "kmod-oaf" "appfilter" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
+        "lucky" "luci-app-lucky"
+        "passwall" "luci-app-passwall"
+    )
+    for plugin in "${lede_conflict_plugins[@]}"; do
+        ./scripts/feeds uninstall "$plugin" || true
+        rm -rf feeds/packages/*/*/"$plugin"
+        rm -rf feeds/luci/*/*/"$plugin"
+    done
+
+    # 移除 openwrt feeds 自带的核心库与过时 luci 版本
+    rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
+    rm -rf feeds/luci/applications/luci-app-passwall
+
+    # 2. 常规拉取无 Tag 插件
+    echo "--- 拉取无 Tag 要求的最新代码 ---"
+    git clone https://github.com/sirpdboy/luci-app-adguardhome.git package/custom/luci-app-adguardhome
+    git clone --depth 1 https://github.com/eamonxg/luci-theme-aurora.git package/custom/luci-theme-aurora
+    git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
+
+    # 3. 自动寻找最新 Tag 并拉取
+    echo "--- 自动寻找最新的 Release Tag ---"
+    clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
+    clone_latest_tag "https://github.com/gdy666/luci-app-lucky" "lucky"
+    clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
+    clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
+
+    # 4. 稀疏克隆 OpenClash (结合自动寻找最新 Tag)
+    echo "--- 稀疏克隆 OpenClash ---"
+    OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
+    OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+
+    mkdir -p /tmp/OpenClash && cd /tmp/OpenClash
+    git init
+    git remote add origin "$OPENCLASH_REPO"
+    git config core.sparseCheckout true
+    echo "luci-app-openclash/*" >> .git/info/sparse-checkout
+
+    if [ -n "$OPENCLASH_TAG" ]; then
+        echo "发现 OpenClash 最新 Tag: $OPENCLASH_TAG，开始稀疏拉取..."
+        git pull --depth 1 origin "$OPENCLASH_TAG"
+    else
+        echo "未获取到 OpenClash Tag，后备拉取 master 分支..."
+        git pull --depth 1 origin master
+    fi
+    mv luci-app-openclash $GITHUB_WORKSPACE/openwrt/package/custom/
+    cd $GITHUB_WORKSPACE/openwrt
+    rm -rf /tmp/OpenClash
+
+# ----------------- [ ImmortalWrt 源码专属逻辑 ] -----------------
+elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
+    echo "====== 开始执行 ImmortalWrt 专属定制 ======"
+
+    # 仅针对 ImmortalWrt v25.12.1 的 Rust 404 专项修复
+    if [ "$SOURCE_BRANCH" == "v25.12.1" ]; then
+        echo "检测到正在编译 ImmortalWrt v25.12.1，为避免 Rust CI 404 报错，正在拉取 OpenWrt 官方 Rust 源码替换..."
+        rm -rf feeds/packages/lang/rust
+        git clone --depth 1 https://github.com/openwrt/packages.git /tmp/openwrt_packages
+        cp -r /tmp/openwrt_packages/lang/rust feeds/packages/lang/
+        rm -rf /tmp/openwrt_packages
+    else
+        echo "当前版本 ($SOURCE_BRANCH) 无需执行 Rust 404 修复，已跳过。"
+    fi
+
+# ----------------- [ 官方 OpenWrt 源码专属逻辑 ] -----------------
+elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
+    echo "====== 开始执行 官方 OpenWrt 专属定制 ======"
+
+    git clone --depth 1 https://github.com/lisaac/luci-app-diskman package/custom/luci-app-diskman
+    curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh
+    bash add_turboacc.sh --no-sfe
 fi
-mv luci-app-openclash $GITHUB_WORKSPACE/openwrt/package/custom/
-cd $GITHUB_WORKSPACE/openwrt
-rm -rf /tmp/OpenClash
 
-# 常规拉取无 Tag 插件
-git clone https://github.com/sirpdboy/luci-app-adguardhome.git package/custom/luci-app-adguardhome
-
-# --- 动态判断是否需要拉取 Docker 相关组件 ---
+# ==========================================
+# 2. 动态判断 Docker (全部源码共用逻辑)
+# ==========================================
 if [ "$BUILD_TYPE" == "public" ]; then
     echo "【公共版】：开始拉取 Docker 与 Dockerman 组件..."
-    # 【改动3】：注释掉你的个人仓库拉取，这样编译时会自动使用源码包自带的 dockerman 和 lib-docker
+    # 注释掉你的个人仓库拉取，这样编译时会自动使用源码包自带的 dockerman 和 lib-docker
     # git clone --depth 1 https://github.com/wjtyyds/luci-app-dockerman.git package/custom/luci-app-dockerman
     # git clone --depth 1 https://github.com/wjtyyds/luci-lib-docker.git package/custom/luci-lib-docker
 else
     echo "【私有版】：无需 Docker，跳过相关组件拉取..."
-fi
-
-# 针对特定固件
-if [ "$FIRMWARE_TYPE" == "openwrt" ]; then
-    git clone --depth 1 https://github.com/lisaac/luci-app-diskman package/custom/luci-app-diskman
-    curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh
-    bash add_turboacc.sh --no-sfe
 fi
 
 # ==========================================
