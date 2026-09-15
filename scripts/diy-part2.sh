@@ -123,8 +123,8 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     echo "--- 拉取无 Tag 要求的最新代码 ---"
     git clone https://github.com/sirpdboy/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/eamonxg/luci-theme-aurora.git package/custom/luci-theme-aurora
-    git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
     git clone --depth 1 https://github.com/lisaac/luci-app-diskman package/custom/luci-app-diskman
+    git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
     # 3. 自动寻找最新 Tag 并拉取
     echo "--- 自动寻找最新的 Release Tag ---"
