@@ -164,6 +164,13 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
 elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     echo "====== 开始执行 官方 OpenWrt 专属定制 ======"
 
+    # 【新增】借用 ImmortalWrt 的 containerd 以兼容新版 Golang
+    echo "--- 正在替换 containerd 源码以修复 Golang 兼容性 ---"
+    rm -rf feeds/packages/utils/containerd
+    git clone --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
+    cp -r /tmp/imm_packages/utils/containerd feeds/packages/utils/
+    rm -rf /tmp/imm_packages
+    
     # 1. 斩断内置冲突插件
     openwrt_conflict_plugins=(
         "adguardhome" "luci-app-adguardhome"
