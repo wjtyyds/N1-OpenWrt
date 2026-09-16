@@ -22,6 +22,16 @@ clone_latest_tag() {
 mkdir -p package/custom
 
 # ==========================================
+# 0.5 修复 Xray-core 依赖的 Golang 版本过低问题
+# ==========================================
+echo "正在替换 Golang 源码为最新版本..."
+rm -rf feeds/packages/lang/golang
+git clone https://github.com/sbwml/packages_lang_golang.git feeds/packages/lang/golang
+
+# 【注意！新增下面这一行！】强制刷新软链接，确保替换生效
+./scripts/feeds install -a -f
+
+# ==========================================
 # 1. 核心大分流：各源码隔离操作 (插件卸载与拉取)
 # ==========================================
 

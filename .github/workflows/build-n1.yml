@@ -51,6 +51,18 @@ jobs:
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
+          
+      # 【新增】专业释放磁盘空间，腾出约 30GB 空间防爆盘
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
 
       - name: Convert inputs to lowercase for scripts
         run: |
