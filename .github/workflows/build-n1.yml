@@ -108,6 +108,16 @@ jobs:
             git clone --depth 1 -b master https://github.com/coolsnowwolf/lede openwrt
           fi
 
+      # 【新增】开启 Github Actions 缓存，加速二次编译
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: openwrt/.ccache
+          key: ${{ runner.os }}-openwrt-ccache-${{ env.FIRMWARE_LOWER }}-${{ inputs.source_branch }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-openwrt-ccache-${{ env.FIRMWARE_LOWER }}-${{ inputs.source_branch }}-
+          save-always: true   # 【关键新增】：无论流水线最后是成功还是失败报错，都强制保存已生成的缓存！
+
       - name: Update & Install Feeds
         run: |
           cd openwrt
@@ -129,6 +139,15 @@ jobs:
       - name: Load Configuration
         run: |
           cp configs/${{ env.FIRMWARE_LOWER }}.config openwrt/.config
+          
+          # 【新增】强制开启 ccache 编译器缓存
+          sed -i 's/^.*CONFIG_CCACHE.*$/CONFIG_CCACHE=y/g' openwrt/.config
+          grep -q "CONFIG_CCACHE=" openwrt/.config || echo "CONFIG_CCACHE=y" >> openwrt/.config
+          
+          # 强制关闭 Debug 调试和 GDB，大幅缩短编译时间并节省庞大的磁盘空间
+          sed -i 's/CONFIG_KERNEL_DEBUG_INFO=y/# CONFIG_KERNEL_DEBUG_INFO is not set/g' openwrt/.config
+          sed -i 's/CONFIG_KERNEL_DEBUG_KERNEL=y/# CONFIG_KERNEL_DEBUG_KERNEL is not set/g' openwrt/.config
+          sed -i 's/CONFIG_GDB=y/# CONFIG_GDB is not set/g' openwrt/.config
           
           sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=512/g' openwrt/.config
           grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=512" >> openwrt/.config
