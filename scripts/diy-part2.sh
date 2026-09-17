@@ -250,6 +250,13 @@ mkdir -p ${FILES_DIR}/usr/bin
 mkdir -p ${FILES_DIR}/root
 mkdir -p ${FILES_DIR}/etc
 
+# 【新增】隐蔽注入旁路由 UDP 防丢包内核参数
+mkdir -p ${FILES_DIR}/etc/sysctl.d
+cat << 'EOF' > ${FILES_DIR}/etc/sysctl.d/99-bridge-fix.conf
+net.bridge.bridge-nf-call-iptables=0
+net.bridge.bridge-nf-call-ip6tables=0
+EOF
+
 # --- 部署素材库中的核心文件 (仅限公共版) ---
 if [ "$BUILD_TYPE" == "public" ] && [ -d "$IMPORT_DIR" ]; then
     if [ -f "${IMPORT_DIR}/lucky" ]; then
