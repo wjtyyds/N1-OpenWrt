@@ -12,30 +12,39 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v4
 
-      - name: 🗑️ Delete Failed or Cancelled Runs
+      - name: 🗑️ Delete Failed Runs & Clean History
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "🔍 开始扫描流水线记录..."
           
-          # 只查杀失败或取消的记录，绝对不碰其他任务的绿色成功记录
+          # ==========================================
+          # 1. 查杀所有固件的残次品（失败/取消），绝对保留成功！
+          # ==========================================
           run_ids=$(gh run list --limit 100 --json databaseId,status,conclusion --jq '.[] | select(.status == "completed" and .conclusion != "success") | .databaseId')
           
-          if [ -z "$run_ids" ]; then
-            echo "🎉 没有找到需要清理的残次品记录！"
-          else
-            echo "开始执行清理操作："
+          if [ -n "$run_ids" ]; then
+            echo "🔥 发现残次品记录，开始抹杀："
             for id in $run_ids; do
-              echo "正在删除失败/取消的记录 ID: $id"
               gh run delete $id || true
             done
-            echo "✅ 失败/取消的记录清理完成！"
           fi
 
-      - name: 👻 Self Destruct (阅后即焚)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "✅ 脏活累活干完了，我是没有感情的杀手，现在我将销毁我自己的运行记录..."
-          # 利用自身的 run_id 执行自毁操作，事了拂衣去，深藏身与名
-          gh run delete ${{ github.run_id }} || true
+          # ==========================================
+          # 2. 查杀“清理脚本”自己的所有历史前任！
+          # ==========================================
+          # 专门过滤出 clean-runs.yml 这个工作流的所有已完成记录
+          cleaner_ids=$(gh run list --workflow "clean-runs.yml" --limit 100 --json databaseId,status --jq '.[] | select(.status == "completed") | .databaseId')
+          
+          if [ -n "$cleaner_ids" ]; then
+            echo "👻 发现历史清理记录，开始毁尸灭迹："
+            for self_id in $cleaner_ids; do
+              # 增加保险机制：绝对不碰当前的自己
+              if [ "$self_id" != "${{ github.run_id }}" ]; then
+                echo "正在删除历史清理记录 ID: $self_id"
+                gh run delete $self_id || true
+              fi
+            done
+          fi
+          
+          echo "✅ 全部清理完成！前任清理记录已销毁，固件成功记录完好无损。"
