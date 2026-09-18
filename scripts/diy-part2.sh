@@ -250,9 +250,10 @@ mkdir -p ${FILES_DIR}/usr/bin
 mkdir -p ${FILES_DIR}/root
 mkdir -p ${FILES_DIR}/etc
 
-# 【新增】隐蔽注入旁路由 UDP 防丢包内核参数
-mkdir -p ${FILES_DIR}/etc/sysctl.d
-cat << 'EOF' > ${FILES_DIR}/etc/sysctl.d/99-bridge-fix.conf
+# 【新增】极其隐蔽地将防丢包参数混入系统自带的 sysctl.conf 中
+cat << 'EOF' >> ${FILES_DIR}/etc/sysctl.conf
+
+# Network routing & bridge optimization
 net.bridge.bridge-nf-call-iptables=0
 net.bridge.bridge-nf-call-ip6tables=0
 net.bridge.bridge-nf-call-arptables=0
