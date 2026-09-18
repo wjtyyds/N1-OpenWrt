@@ -255,6 +255,7 @@ mkdir -p ${FILES_DIR}/etc/sysctl.d
 cat << 'EOF' > ${FILES_DIR}/etc/sysctl.d/99-bridge-fix.conf
 net.bridge.bridge-nf-call-iptables=0
 net.bridge.bridge-nf-call-ip6tables=0
+net.bridge.bridge-nf-call-arptables=0
 EOF
 
 # --- 部署素材库中的核心文件 (仅限公共版) ---
