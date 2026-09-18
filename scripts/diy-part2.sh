@@ -28,7 +28,6 @@ echo "正在替换 Golang 源码为最新版本..."
 rm -rf feeds/packages/lang/golang
 git clone https://github.com/sbwml/packages_lang_golang.git feeds/packages/lang/golang
 
-# 【注意！新增下面这一行！】强制刷新软链接，确保替换生效
 ./scripts/feeds install -a -f
 
 # ==========================================
@@ -39,7 +38,6 @@ git clone https://github.com/sbwml/packages_lang_golang.git feeds/packages/lang/
 if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     echo "====== 开始执行 LEDE 专属定制 ======"
 
-    # 1. 斩断内置冲突插件
     lede_conflict_plugins=(
         "adguardhome" "luci-app-adguardhome"
         "luci-app-openclash" "openclash"
@@ -53,25 +51,18 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
         rm -rf feeds/luci/*/*/"$plugin"
     done
 
-    # 移除 openwrt feeds 自带的核心库与过时 luci 版本
     rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
     rm -rf feeds/luci/applications/luci-app-passwall
 
-    # 2. 常规拉取无 Tag 插件
-    echo "--- 拉取无 Tag 要求的最新代码 ---"
     git clone https://github.com/sirpdboy/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/eamonxg/luci-theme-aurora.git package/custom/luci-theme-aurora
     git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
-    # 3. 自动寻找最新 Tag 并拉取
-    echo "--- 自动寻找最新的 Release Tag ---"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
     clone_latest_tag "https://github.com/gdy666/luci-app-lucky" "lucky"
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
     clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
-    # 4. 稀疏克隆 OpenClash
-    echo "--- 稀疏克隆 OpenClash ---"
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
@@ -82,10 +73,8 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     echo "luci-app-openclash/*" >> .git/info/sparse-checkout
 
     if [ -n "$OPENCLASH_TAG" ]; then
-        echo "发现 OpenClash 最新 Tag: $OPENCLASH_TAG，开始稀疏拉取..."
         git pull --depth 1 origin "$OPENCLASH_TAG"
     else
-        echo "未获取到 OpenClash Tag，后备拉取 master 分支..."
         git pull --depth 1 origin master
     fi
     mv luci-app-openclash $GITHUB_WORKSPACE/openwrt/package/custom/
@@ -96,18 +85,13 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
 elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     echo "====== 开始执行 ImmortalWrt 专属定制 ======"
 
-    # 仅针对 ImmortalWrt v25.12.1 的 Rust 404 专项修复
     if [ "$SOURCE_BRANCH" == "v25.12.1" ]; then
-        echo "检测到正在编译 ImmortalWrt v25.12.1，为避免 Rust CI 404 报错，正在拉取 OpenWrt 官方 Rust 源码替换..."
         rm -rf feeds/packages/lang/rust
         git clone --depth 1 https://github.com/openwrt/packages.git /tmp/openwrt_packages
         cp -r /tmp/openwrt_packages/lang/rust feeds/packages/lang/
         rm -rf /tmp/openwrt_packages
-    else
-        echo "当前版本 ($SOURCE_BRANCH) 无需执行 Rust 404 修复，已跳过。"
     fi
 
-    # 1. 斩断内置冲突插件 (只斩你需要替换的，保留自带 diskman 和 dockerman)
     immortalwrt_conflict_plugins=(
         "adguardhome" "luci-app-adguardhome"
         "luci-app-openclash" "openclash"
@@ -121,25 +105,18 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
         rm -rf feeds/luci/*/*/"$plugin"
     done
 
-    # 移除 feeds 自带的核心库与过时 luci 版本
     rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
     rm -rf feeds/luci/applications/luci-app-passwall
 
-    # 2. 常规拉取无 Tag 插件
-    echo "--- 拉取无 Tag 要求的最新代码 ---"
     git clone https://github.com/sirpdboy/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/eamonxg/luci-theme-aurora.git package/custom/luci-theme-aurora
     git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
-    # 3. 自动寻找最新 Tag 并拉取
-    echo "--- 自动寻找最新的 Release Tag ---"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
     clone_latest_tag "https://github.com/gdy666/luci-app-lucky" "lucky"
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
     clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
-    # 4. 稀疏克隆 OpenClash
-    echo "--- 稀疏克隆 OpenClash ---"
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
@@ -150,10 +127,8 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     echo "luci-app-openclash/*" >> .git/info/sparse-checkout
 
     if [ -n "$OPENCLASH_TAG" ]; then
-        echo "发现 OpenClash 最新 Tag: $OPENCLASH_TAG，开始稀疏拉取..."
         git pull --depth 1 origin "$OPENCLASH_TAG"
     else
-        echo "未获取到 OpenClash Tag，后备拉取 master 分支..."
         git pull --depth 1 origin master
     fi
     mv luci-app-openclash $GITHUB_WORKSPACE/openwrt/package/custom/
@@ -164,14 +139,12 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
 elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     echo "====== 开始执行 官方 OpenWrt 专属定制 ======"
 
-    # 【核心修复】完整替换 Docker 全家桶以兼容新版 Golang
     echo "--- 正在完整替换 Docker 组件 ---"
     rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc}
     git clone --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
     cp -r /tmp/imm_packages/utils/{docker,dockerd,containerd,runc} feeds/packages/utils/
     rm -rf /tmp/imm_packages
 
-    # 1. 斩断内置冲突插件
     openwrt_conflict_plugins=(
         "adguardhome" "luci-app-adguardhome"
         "luci-app-openclash" "openclash"
@@ -185,26 +158,19 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
         rm -rf feeds/luci/*/*/"$plugin"
     done
 
-    # 移除 openwrt feeds 自带的核心库与过时 luci 版本
     rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
     rm -rf feeds/luci/applications/luci-app-passwall
 
-    # 2. 常规拉取无 Tag 插件
-    echo "--- 拉取无 Tag 要求的最新代码 ---"
     git clone https://github.com/sirpdboy/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/eamonxg/luci-theme-aurora.git package/custom/luci-theme-aurora
     git clone --depth 1 https://github.com/lisaac/luci-app-diskman package/custom/luci-app-diskman
     git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
-    # 3. 自动寻找最新 Tag 并拉取
-    echo "--- 自动寻找最新的 Release Tag ---"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
     clone_latest_tag "https://github.com/gdy666/luci-app-lucky" "lucky"
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
     clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
-    # 4. 稀疏克隆 OpenClash
-    echo "--- 稀疏克隆 OpenClash ---"
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
@@ -215,24 +181,18 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     echo "luci-app-openclash/*" >> .git/info/sparse-checkout
 
     if [ -n "$OPENCLASH_TAG" ]; then
-        echo "发现 OpenClash 最新 Tag: $OPENCLASH_TAG，开始稀疏拉取..."
         git pull --depth 1 origin "$OPENCLASH_TAG"
     else
-        echo "未获取到 OpenClash Tag，后备拉取 master 分支..."
         git pull --depth 1 origin master
     fi
     mv luci-app-openclash $GITHUB_WORKSPACE/openwrt/package/custom/
     cd $GITHUB_WORKSPACE/openwrt
     rm -rf /tmp/OpenClash
 
-    # 5. 添加 Turboacc
     curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh
     bash add_turboacc.sh --no-sfe
 fi
 
-# ==========================================
-# 2. 动态判断 Docker (全部源码共用逻辑)
-# ==========================================
 if [ "$BUILD_TYPE" == "public" ]; then
     echo "【公共版】：使用源码集成的 Docker 与 Dockerman 组件..."
 else
@@ -240,37 +200,58 @@ else
 fi
 
 # ==========================================
-# 3. 本地化环境与定制配置合并 (降维打击)
+# 2. 本地化环境与隐蔽自启服务注入
 # ==========================================
-echo "====== 开始组装底层定制文件 ======"
 FILES_DIR="package/base-files/files"
-IMPORT_DIR="$GITHUB_WORKSPACE/auto_import"
 mkdir -p ${FILES_DIR}/etc/uci-defaults
-mkdir -p ${FILES_DIR}/usr/bin
-mkdir -p ${FILES_DIR}/root
-mkdir -p ${FILES_DIR}/etc
+mkdir -p ${FILES_DIR}/etc/init.d
+mkdir -p ${FILES_DIR}/etc/rc.d
 
-# 【新增】极其隐蔽地将防丢包参数混入系统自带的 sysctl.conf 中
-cat << 'EOF' >> ${FILES_DIR}/etc/sysctl.conf
+# 【核心暗杀服务】：U盘不动如山，eMMC搬运后彻底自杀抹除痕迹
+cat << 'EOF' > ${FILES_DIR}/etc/init.d/n1_core_init
+#!/bin/sh /etc/rc.common
+START=99
 
-# Network routing & bridge optimization
-net.bridge.bridge-nf-call-iptables=0
-net.bridge.bridge-nf-call-ip6tables=0
-net.bridge.bridge-nf-call-arptables=0
+start() {
+    (
+        sleep 3
+        ROOT_DEV=$(mount | grep ' /rom ' | awk '{print $1}')
+        [ -z "$ROOT_DEV" ] && ROOT_DEV=$(mount | grep -E ' / ' | awk '{print $1}')
+
+        if echo "$ROOT_DEV" | grep -q "mmcblk"; then
+            # eMMC 环境：启动 Docker
+            if [ -x /etc/init.d/dockerd ]; then
+                /etc/init.d/dockerd enable
+                /etc/init.d/dockerd start
+            fi
+
+            # AdGuardHome 专属路径搬运（绝不更改你的设计）
+            if [ -f /usr/lib/.adg_core_tmp ]; then
+                mkdir -p /mnt/mmcblk2p4/AdGuardHome
+                mv /usr/lib/.adg_core_tmp /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
+                chmod 755 /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
+            fi
+
+            # 【阅后即焚】：完成使命后，彻底抹杀自己，固件完美无痕
+            rm -f /etc/init.d/n1_core_init
+            rm -f /etc/rc.d/S99n1_core_init
+        else
+            # U 盘环境：关闭 Docker，保留隐蔽的 .adg_core_tmp 待命
+            if [ -x /etc/init.d/dockerd ]; then
+                /etc/init.d/dockerd disable
+                /etc/init.d/dockerd stop 2>/dev/null
+            fi
+        fi
+    ) &
+}
 EOF
+chmod +x ${FILES_DIR}/etc/init.d/n1_core_init
+ln -s ../init.d/n1_core_init ${FILES_DIR}/etc/rc.d/S99n1_core_init
 
-# --- 部署素材库中的核心文件 (仅限公共版) ---
-if [ "$BUILD_TYPE" == "public" ] && [ -d "$IMPORT_DIR" ]; then
-    if [ -f "${IMPORT_DIR}/lucky" ]; then
-        cp "${IMPORT_DIR}/lucky" "${FILES_DIR}/root/lucky_tmp" || true
-    fi
-fi
 
-# --- 基础配置脚本 (对所有人通用) ---
+# --- 基础配置与网桥优化脚本 (对所有人通用) ---
 cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/99_custom_setup
 #!/bin/sh
-
-# A. 挂载 OAF 模块
 if [ -f /root/oaf.ko ]; then
     KVER=$(uname -r)
     mkdir -p /lib/modules/$KVER
@@ -279,30 +260,35 @@ if [ -f /root/oaf.ko ]; then
     echo "oaf" > /etc/modules.d/99-oaf
     modprobe oaf
 fi
+
+# 极其隐蔽地追加网桥防丢包参数到底层文件
+cat << 'SYSCTL_EOF' >> /etc/sysctl.conf
+
+# Network routing & bridge optimization
+net.bridge.bridge-nf-call-iptables=0
+net.bridge.bridge-nf-call-ip6tables=0
+net.bridge.bridge-nf-call-arptables=0
+SYSCTL_EOF
+sysctl -p
 EOF
 
 if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     cat << 'EOF' >> ${FILES_DIR}/etc/uci-defaults/99_custom_setup
-# B. 修复 UHTTPD HTTPS (仅限 Lede 固件)
 uci delete uhttpd.main.listen_https 2>/dev/null
 uci commit uhttpd 2>/dev/null
 /etc/init.d/uhttpd restart 2>/dev/null
 EOF
 fi
 
+# 你的专属配置路径（绝对保留）
 cat << 'EOF' >> ${FILES_DIR}/etc/uci-defaults/99_custom_setup
-# C. AdGuardHome 通用核心路径设置
 uci set AdGuardHome.AdGuardHome.binpath='/usr/bin/AdGuardHome/AdGuardHome' 2>/dev/null
 uci set AdGuardHome.AdGuardHome.workdir='/usr/bin/AdGuardHome' 2>/dev/null
 uci commit AdGuardHome 2>/dev/null
 EOF
 
-# --- 个人隐私与独立逻辑分配 ---
 if [ "$BUILD_TYPE" == "personal" ]; then
-    echo "当前是【个人分支】：注入隐私与宽带拨号..."
-    
     cat << EOF >> ${FILES_DIR}/etc/uci-defaults/99_custom_setup
-# 注入个人宽带
 uci delete network.lan.type 2>/dev/null
 uci set network.lan.device='eth0'
 uci set network.lan.ifname='eth0'
@@ -324,17 +310,12 @@ uci set network.wan.norelease='1'
 uci set network.wan.multipath='off'
 uci commit network
 
-# 定时清理任务
 mkdir -p /etc/crontabs
 if ! grep -q "drop_caches" /etc/crontabs/root 2>/dev/null; then
     echo "0 22 * * * sync; echo 3 > /proc/sys/vm/drop_caches" >> /etc/crontabs/root
 fi
 
-# 设置 AdGuardHome 隐私配置路径
 uci set AdGuardHome.AdGuardHome.configpath='/etc/AdGuardHome.yaml'
 uci commit AdGuardHome
 EOF
-
-else
-    echo "当前是【网友分支】：保持纯净，无个人隐私..."
 fi

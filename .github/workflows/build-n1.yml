@@ -51,8 +51,7 @@ jobs:
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
-          
-      # 【新增】专业释放磁盘空间，腾出约 30GB 空间防爆盘
+
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
         with:
@@ -207,121 +206,119 @@ jobs:
           ROOTFS_FILE=$(find ../openwrt/bin/targets/ -type f -name "*-rootfs.tar.gz" | head -n 1)
           sudo mv "$ROOTFS_FILE" ./openwrt-armvirt-64-default-rootfs.tar.gz
           
-          mkdir -p inject_tmp/root inject_tmp/etc
+          # 创建准备注入的目录
+          mkdir -p inject_tmp/root inject_tmp/etc inject_tmp/usr/bin inject_tmp/usr/lib
           
+          # ----------------------------------------------------
+          # 💡 原生物理注入阶段 (彻底避开编译期文件冲突)
+          # ----------------------------------------------------
+          
+          # 1. 提取官方最新 AdGuardHome (屏蔽 -b 测试版)
+          echo "获取 AdGuardHome 最新稳定版..."
+          AGH_API="https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest"
+          AGH_URL=$(curl -s "$AGH_API" | grep "browser_download_url" | grep "linux_arm64.tar.gz" | head -n 1 | cut -d '"' -f 4)
+          if [ -n "$AGH_URL" ]; then
+              wget -qO /tmp/agh.tar.gz "$AGH_URL"
+              mkdir -p /tmp/agh_extract
+              tar -xzf /tmp/agh.tar.gz -C /tmp/agh_extract
+              AGH_BIN=$(find /tmp/agh_extract -type f -name "AdGuardHome" | head -n 1)
+              if [ -n "$AGH_BIN" ]; then
+                  mv "$AGH_BIN" inject_tmp/usr/lib/.adg_core_tmp
+                  chmod 755 inject_tmp/usr/lib/.adg_core_tmp
+                  echo "✅ AdGuardHome 下载完成并隐藏！"
+              fi
+          fi
+
+          # 2. 提取最新 Lucky (自动区分 Public 与 Personal)
+          echo "获取 Lucky 最新版..."
+          if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
+              LUCKY_PATTERN="Linux_arm64_wanji_docker.tar.gz"
+          else
+              LUCKY_PATTERN="Linux_arm64_wanji.tar.gz"
+          fi
+          LUCKY_API="https://api.github.com/repos/gdy666/lucky/releases/latest"
+          LUCKY_URL=$(curl -s "$LUCKY_API" | grep "browser_download_url" | grep "$LUCKY_PATTERN" | head -n 1 | cut -d '"' -f 4)
+          if [ -n "$LUCKY_URL" ]; then
+              wget -qO /tmp/lucky.tar.gz "$LUCKY_URL"
+              mkdir -p /tmp/lucky_extract
+              tar -xzf /tmp/lucky.tar.gz -C /tmp/lucky_extract
+              LUCKY_BIN=$(find /tmp/lucky_extract -type f -name "lucky" | head -n 1)
+              if [ -n "$LUCKY_BIN" ]; then
+                  # 直接放入 usr/bin，tar -rvf 打包时会物理覆盖掉编译出来的旧版！
+                  mv "$LUCKY_BIN" inject_tmp/usr/bin/lucky
+                  chmod 755 inject_tmp/usr/bin/lucky
+                  echo "✅ Lucky 下载完成，准备强行覆盖！"
+              fi
+          fi
+
+          # 3. 提取最新 OpenClash 独尊 Meta 内核 (N1 专属 arm64 架构，源自官方稳定 master)
+          # 💡 [全新加入] 按照你的指示下载并放置到指定目录
+          echo "获取 OpenClash Meta 内核..."
+          mkdir -p inject_tmp/etc/openclash/core
+          
+          # 下载你指定的 arm64 版本的 Meta 内核
+          wget -qO /tmp/clash_meta.tar.gz "https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz" || true
+          if [ -f /tmp/clash_meta.tar.gz ]; then
+              # 先解压到临时目录
+              mkdir -p /tmp/clash_meta_tmp
+              tar -xzf /tmp/clash_meta.tar.gz -C /tmp/clash_meta_tmp/ || true
+              if [ -f /tmp/clash_meta_tmp/clash ]; then
+                  # 重命名为 clash_meta 并移动到最终位置
+                  mv /tmp/clash_meta_tmp/clash inject_tmp/etc/openclash/core/clash_meta
+                  chmod 755 inject_tmp/etc/openclash/core/clash_meta
+                  echo "✅ OpenClash Meta 内核专属注入成功！"
+              fi
+          fi
+          
+          # 4. 处理 OAF 模块
           OAF_UI_VER=$(curl -s "https://api.github.com/repos/destan19/OpenAppFilter/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
           if [[ "$OAF_UI_VER" == v7* ]]; then
               OAF_KMOD_TAG="OAF_Kmods_v7.0.1"
           else
               OAF_KMOD_TAG="OAF_Kmods_v6.1.8"
           fi
-          
           if [ -n "$PRIVATE_REPO" ]; then
               gh release download "$OAF_KMOD_TAG" -R "$PRIVATE_REPO" -p "oaf-${REAL_KERNEL_VER}.tar.gz" --clobber > /dev/null 2>&1 || true
           fi
-          
-          if [ ! -f "oaf-${REAL_KERNEL_VER}.tar.gz" ]; then
-              if [ -f "../auto_import/oaf-${REAL_KERNEL_VER}.tar.gz" ]; then
-                  cp "../auto_import/oaf-${REAL_KERNEL_VER}.tar.gz" ./ || true
-              fi
+          if [ ! -f "oaf-${REAL_KERNEL_VER}.tar.gz" ] && [ -f "../auto_import/oaf-${REAL_KERNEL_VER}.tar.gz" ]; then
+              cp "../auto_import/oaf-${REAL_KERNEL_VER}.tar.gz" ./ || true
           fi
-          
           if [ -f "oaf-${REAL_KERNEL_VER}.tar.gz" ]; then
               tar -xzf "oaf-${REAL_KERNEL_VER}.tar.gz" -C inject_tmp/root/ 2>/dev/null || true
               find inject_tmp/root/ -type f -name "oaf.ko" -exec mv {} inject_tmp/root/oaf.ko \; 2>/dev/null || true
               find inject_tmp/root/ -type d -empty -delete 2>/dev/null || true
-          else
-              echo "提示：未找到 oaf-${REAL_KERNEL_VER}.tar.gz，跳过 OAF 模块注入。"
           fi
           
+          # 5. 私密配置解压注入
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
               if [ -n "$PRIVATE_REPO" ]; then
-                  mkdir -p inject_tmp/root/private_conf
                   gh release download "Private-Configs" -R "$PRIVATE_REPO" -p "private_config.zip" --clobber > /dev/null 2>&1 || true
-          
                   if [ -f "private_config.zip" ]; then
-                      unzip -q "private_config.zip" -d inject_tmp/root/private_conf/ || true
+                      mkdir -p private_conf_tmp
+                      unzip -q "private_config.zip" -d private_conf_tmp/ || true
           
-                      if [ -f "inject_tmp/root/private_conf/AdGuardHome.yaml" ]; then
-                          mv inject_tmp/root/private_conf/AdGuardHome.yaml inject_tmp/root/AdGuardHome.yaml_tmp || true
+                      if [ -f "private_conf_tmp/AdGuardHome.yaml" ]; then
+                          mkdir -p inject_tmp/etc
+                          mv private_conf_tmp/AdGuardHome.yaml inject_tmp/etc/AdGuardHome.yaml || true
                       fi
-          
-                      if [ -f "inject_tmp/root/private_conf/AdGuardHome" ]; then
-                          mv inject_tmp/root/private_conf/AdGuardHome inject_tmp/root/AdGuardHome_tmp || true
-                      fi
-                      if [ -f "inject_tmp/root/private_conf/lucky" ]; then
-                          mv inject_tmp/root/private_conf/lucky inject_tmp/root/lucky_tmp || true
-                      fi
-          
-                      LUCKY_ZIP=$(ls inject_tmp/root/private_conf/lucky_*.zip 2>/dev/null | head -n 1)
+                      LUCKY_ZIP=$(ls private_conf_tmp/lucky_*.zip 2>/dev/null | head -n 1)
                       if [ -n "$LUCKY_ZIP" ]; then
                           mkdir -p inject_tmp/etc/config/lucky.daji
                           unzip -q -o "$LUCKY_ZIP" -d inject_tmp/etc/config/lucky.daji/ || true
                       fi
-          
-                      rm -rf inject_tmp/root/private_conf private_config.zip
+                      rm -rf private_conf_tmp private_config.zip
                   fi
-              else
-                  echo "警告：未配置 PRIVATE_REPO 密钥，跳过私密配置拉取。"
-              fi
-          fi
-          
-          if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
-              if [ -f "../auto_import/AdGuardHome" ]; then
-                  cp "../auto_import/AdGuardHome" "inject_tmp/root/AdGuardHome_tmp" || true
               fi
           fi
           
           sudo gunzip -f ./openwrt-armvirt-64-default-rootfs.tar.gz
           
+          # 极简纯净的 rc.local，没有半句废话
           cat << 'EOF' > inject_tmp/etc/rc.local
           # Put your custom commands here that should be executed once
           # the system init finished. By default this file does nothing.
           
           /usr/sbin/balethirq.pl
-          
-          (
-              sleep 3
-              ROOT_DEV=$(mount | grep ' /rom ' | awk '{print $1}')
-              [ -z "$ROOT_DEV" ] && ROOT_DEV=$(mount | grep -E ' / ' | awk '{print $1}')
-          
-              if echo "$ROOT_DEV" | grep -q "mmcblk"; then
-                  if [ -x /etc/init.d/dockerd ]; then
-                      /etc/init.d/dockerd enable
-                      /etc/init.d/dockerd start
-                  fi
-                  if [ -f /root/AdGuardHome_tmp ]; then
-                      mkdir -p /mnt/mmcblk2p4/AdGuardHome
-                      mv /root/AdGuardHome_tmp /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
-                      chmod 755 /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
-                  fi
-              else
-                  if [ -x /etc/init.d/dockerd ]; then
-                      /etc/init.d/dockerd disable
-                      /etc/init.d/dockerd stop 2>/dev/null
-                  fi
-              fi
-          
-              if [ -f /root/AdGuardHome.yaml_tmp ]; then
-                  mv -f /root/AdGuardHome.yaml_tmp /etc/AdGuardHome.yaml
-                  /etc/init.d/AdGuardHome restart 2>/dev/null
-              fi
-          
-              if [ -f /root/lucky_tmp ]; then
-                  mv -f /root/lucky_tmp /usr/bin/lucky
-                  chmod 755 /usr/bin/lucky
-              fi
-          
-              rm -f /root/lucky_tmp 2>/dev/null
-              /etc/init.d/lucky restart 2>/dev/null
-          
-              echo '# Put your custom commands here that should be executed once' > /etc/rc.local
-              echo '# the system init finished. By default this file does nothing.' >> /etc/rc.local
-              echo '' >> /etc/rc.local
-              echo '/usr/sbin/balethirq.pl' >> /etc/rc.local
-              echo '' >> /etc/rc.local
-              echo 'exit 0' >> /etc/rc.local
-          ) &
           
           exit 0
           EOF
@@ -335,6 +332,7 @@ jobs:
           fi
           
           cd inject_tmp
+          # 强制物理覆盖并追加进镜像
           sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
           cd ..
           sudo gzip -9 ./openwrt-armvirt-64-default-rootfs.tar
