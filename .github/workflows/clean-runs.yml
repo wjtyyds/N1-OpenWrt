@@ -7,8 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: write
+      contents: read  # 【修复】必须加上读取权限，否则 checkout 拉取代码会报 repository not found
     steps:
-      # 【核心修复】：必须先 Checkout 代码，让环境里有 .git 目录，gh 命令才能认得路！
       - name: Checkout Repo
         uses: actions/checkout@v4
 
@@ -18,7 +18,7 @@ jobs:
         run: |
           echo "🔍 开始扫描流水线记录..."
           
-          # 💡 核心修改：增加 conclusion 字段读取，并在 jq 筛选中排除 conclusion 为 "success" 的记录
+          # 💡 过滤掉 conclusion 为 "success" 的记录，保留绿色成功的历史
           run_ids=$(gh run list --limit 100 --json databaseId,status,conclusion --jq '.[] | select(.status == "completed" and .conclusion != "success") | .databaseId')
           
           if [ -z "$run_ids" ]; then
