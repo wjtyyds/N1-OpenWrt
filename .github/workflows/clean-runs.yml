@@ -7,29 +7,35 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: write
-      contents: read  # 【修复】必须加上读取权限，否则 checkout 拉取代码会报 repository not found
+      contents: read
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
 
-      - name: 🗑️ Delete Failed or Cancelled Runs (Keep Success)
+      - name: 🗑️ Delete Failed or Cancelled Runs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "🔍 开始扫描流水线记录..."
           
-          # 💡 过滤掉 conclusion 为 "success" 的记录，保留绿色成功的历史
+          # 只查杀失败或取消的记录，绝对不碰其他任务的绿色成功记录
           run_ids=$(gh run list --limit 100 --json databaseId,status,conclusion --jq '.[] | select(.status == "completed" and .conclusion != "success") | .databaseId')
           
           if [ -z "$run_ids" ]; then
-            echo "🎉 没有找到需要清理的失败或取消记录，绿色成功的记录已被保留！"
-            exit 0
+            echo "🎉 没有找到需要清理的残次品记录！"
+          else
+            echo "开始执行清理操作："
+            for id in $run_ids; do
+              echo "正在删除失败/取消的记录 ID: $id"
+              gh run delete $id || true
+            done
+            echo "✅ 失败/取消的记录清理完成！"
           fi
-          
-          echo "开始执行删除操作："
-          for id in $run_ids; do
-            echo "正在删除失败/取消的记录 ID: $id"
-            gh run delete $id || true
-          done
-          
-          echo "✅ 清理完成！绿色成功的记录及正在运行的任务毫发无损。"
+
+      - name: 👻 Self Destruct (阅后即焚)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "✅ 脏活累活干完了，我是没有感情的杀手，现在我将销毁我自己的运行记录..."
+          # 利用自身的 run_id 执行自毁操作，事了拂衣去，深藏身与名
+          gh run delete ${{ github.run_id }} || true
