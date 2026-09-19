@@ -45,7 +45,6 @@ on:
 
 jobs:
   build:
-    # 💡 切换为 ubuntu-22.04，系统底层占用更小，能腾出更多空间给 Rust
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -135,10 +134,6 @@ jobs:
           sed -i 's/CONFIG_KERNEL_DEBUG_KERNEL=y/# CONFIG_KERNEL_DEBUG_KERNEL is not set/g' openwrt/.config
           sed -i 's/CONFIG_GDB=y/# CONFIG_GDB is not set/g' openwrt/.config
           
-          # 💡 [网络防护]：强行注入国内 Go 模块代理，防 docker-compose 编译超时报错
-          sed -i 's/CONFIG_GOPROXY=".*"/CONFIG_GOPROXY="https:\/\/goproxy.io,direct"/g' openwrt/.config
-          grep -q "CONFIG_GOPROXY=" openwrt/.config || echo 'CONFIG_GOPROXY="https://goproxy.io,direct"' >> openwrt/.config
-          
           sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=512/g' openwrt/.config
           grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=512" >> openwrt/.config
           
@@ -167,7 +162,7 @@ jobs:
         run: |
           cd openwrt
           
-          # 💡 [终极杀招：释放 3GB+ 空间保 Rust]：强行删掉所有插件库的冗余 .git 历史文件夹
+          # 💡 强行删掉所有插件库的冗余 .git 历史文件夹以防爆盘
           echo "清理冗余 .git 历史以极限榨取硬盘空间..."
           find ./feeds -type d -name ".git" -exec rm -rf {} + 2>/dev/null || true
           

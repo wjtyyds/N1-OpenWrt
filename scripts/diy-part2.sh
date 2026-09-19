@@ -22,15 +22,6 @@ clone_latest_tag() {
 mkdir -p package/custom
 
 # ==========================================
-# 0.5 修复 Xray-core 依赖的 Golang 版本过低问题
-# ==========================================
-echo "正在替换 Golang 源码为最新版本..."
-rm -rf feeds/packages/lang/golang
-git clone https://github.com/sbwml/packages_lang_golang.git feeds/packages/lang/golang
-
-./scripts/feeds install -a -f
-
-# ==========================================
 # 1. 核心大分流：各源码隔离操作 (插件卸载与拉取)
 # ==========================================
 
@@ -108,13 +99,6 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
     rm -rf feeds/luci/applications/luci-app-passwall
 
-    # 💡 [针对 ImmortalWrt 报错新增]：替换最新的 docker-compose 源码以适配新版 Golang
-    echo "--- 正在修复 docker-compose 编译兼容性 ---"
-    rm -rf feeds/packages/utils/docker-compose
-    git clone --depth 1 https://github.com/openwrt/packages.git /tmp/ow_packages
-    cp -r /tmp/ow_packages/utils/docker-compose feeds/packages/utils/
-    rm -rf /tmp/ow_packages
-
     git clone https://github.com/sirpdboy/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/eamonxg/luci-theme-aurora.git package/custom/luci-theme-aurora
     git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
@@ -145,13 +129,6 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
 # ----------------- [ 官方 OpenWrt 源码专属逻辑 ] -----------------
 elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     echo "====== 开始执行 官方 OpenWrt 专属定制 ======"
-
-    # 💡 [补全替换]：把 docker-compose 也加入强制更新阵容
-    echo "--- 正在完整替换 Docker 组件 ---"
-    rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose}
-    git clone --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
-    cp -r /tmp/imm_packages/utils/{docker,dockerd,containerd,runc,docker-compose} feeds/packages/utils/
-    rm -rf /tmp/imm_packages
 
     openwrt_conflict_plugins=(
         "adguardhome" "luci-app-adguardhome"
