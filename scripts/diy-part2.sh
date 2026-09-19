@@ -62,7 +62,6 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
     clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
-    # OpenClash 拉取逻辑
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     mkdir -p /tmp/OpenClash && cd /tmp/OpenClash
@@ -82,7 +81,7 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
 elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     echo "====== 开始执行 ImmortalWrt 专属定制 ======"
 
-    # 💡 落实选项 1：解决 containerd 等与 Go 1.27 的链接报错
+    # 💡 [选项1]：完整替换 Docker 引擎以适配 Go 1.27
     echo "--- 正在完整替换 Docker 组件引擎以适配 Go 1.27 ---"
     rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose}
     git clone --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
@@ -121,7 +120,6 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
     clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
-    # OpenClash 拉取逻辑
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     mkdir -p /tmp/OpenClash && cd /tmp/OpenClash
@@ -141,7 +139,7 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
 elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     echo "====== 开始执行 官方 OpenWrt 专属定制 ======"
 
-    # 💡 落实选项 1：解决 containerd 等与 Go 1.27 的链接报错
+    # 💡 [选项1]：完整替换 Docker 引擎以适配 Go 1.27
     echo "--- 正在完整替换 Docker 组件引擎以适配 Go 1.27 ---"
     rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose}
     git clone --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
@@ -174,7 +172,6 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
     clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
-    # OpenClash 拉取逻辑
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     mkdir -p /tmp/OpenClash && cd /tmp/OpenClash
@@ -208,56 +205,65 @@ FILES_DIR="package/base-files/files"
 mkdir -p ${FILES_DIR}/etc/uci-defaults
 mkdir -p ${FILES_DIR}/etc/init.d
 
-# 💡【核心防死链与调度脚本】：动态挂载点识别 + eMMC 骨灰级自毁
+# 💡【核心守护与软链管家】：START=90 精准卡点，智能分配 U盘/eMMC 物理数据盘！
 cat << 'EOF' > ${FILES_DIR}/etc/init.d/core_init
 #!/bin/sh /etc/rc.common
-# 设为17，优先级极高，赶在 AdGuardHome 等服务启动前完成调度
-START=17
+START=90
 
 start() {
-    # 1. 动态获取真实数据盘挂载点 (U盘通常为 sda4, eMMC为 mmcblk2p4)
-    DATA_DIR=""
-    if [ -d /mnt/mmcblk2p4 ]; then
-        DATA_DIR="/mnt/mmcblk2p4"
-    elif [ -d /mnt/sda4 ]; then
-        DATA_DIR="/mnt/sda4"
-    fi
+    (
+        sleep 5
+        DATA_DIR=""
+        IS_EMMC=0
 
-    # 2. ADG 核心下发与动态软链机制
-    if [ -n "$DATA_DIR" ]; then
-        mkdir -p $DATA_DIR/AdGuardHome
-        # 只要存在备用核心库，就覆盖过去 (保障不管是U盘还是新写的eMMC，第一次都能拿最新版)
-        if [ -f /usr/lib/core_backup/AdGuardHome_core ]; then
-            cp -f /usr/lib/core_backup/AdGuardHome_core $DATA_DIR/AdGuardHome/AdGuardHome
-            chmod 755 $DATA_DIR/AdGuardHome/AdGuardHome
+        # 判断系统根目录是否在 eMMC
+        ROOT_PART=$(df -h / | tail -n1 | awk '{print $1}')
+        if echo "$ROOT_PART" | grep -q "mmcblk"; then
+            IS_EMMC=1
         fi
 
-        # 暴力清理死掉的软链或遗留文件，创建指向动态数据盘的新软链
-        rm -rf /usr/bin/AdGuardHome
-        ln -sf $DATA_DIR/AdGuardHome /usr/bin/AdGuardHome
-    fi
+        # 动态探测真实数据盘挂载点 (优先 eMMC，其次 U盘)
+        if [ -d /mnt/mmcblk2p4 ]; then
+            DATA_DIR="/mnt/mmcblk2p4"
+        elif [ -d /mnt/sda4 ]; then
+            DATA_DIR="/mnt/sda4"
+        fi
 
-    # 3. Lucky 核心开机覆盖
-    if [ -f /usr/lib/core_backup/lucky ]; then
-        cp -f /usr/lib/core_backup/lucky /usr/bin/lucky
-        chmod 755 /usr/bin/lucky
-    fi
+        # 如果找到了数据盘，开始核心调度
+        if [ -n "$DATA_DIR" ]; then
+            mkdir -p $DATA_DIR/AdGuardHome
+            # 如果存在我们打包的备用核心
+            if [ -f /usr/lib/core_backup/AdGuardHome_core ]; then
+                if [ "$IS_EMMC" = "1" ]; then
+                    # eMMC 模式：移动核心并删源文件
+                    mv /usr/lib/core_backup/AdGuardHome_core $DATA_DIR/AdGuardHome/AdGuardHome
+                else
+                    # U盘模式：复制核心，永久保留母盘的备份弹药
+                    cp /usr/lib/core_backup/AdGuardHome_core $DATA_DIR/AdGuardHome/AdGuardHome
+                fi
+                chmod 755 $DATA_DIR/AdGuardHome/AdGuardHome
+            fi
 
-    # 4. 判断是否为 eMMC 启动，执行“阅后即焚”
-    ROOT_PART=$(df -h / | tail -n1 | awk '{print $1}')
-    if echo "$ROOT_PART" | grep -q "mmcblk"; then
-        # 真实 eMMC 落地完毕，销毁备用核心库以节省空间
-        rm -rf /usr/lib/core_backup
+            # 暴力破除死链，创建指向当前真实数据盘的新软链
+            rm -rf /usr/bin/AdGuardHome
+            ln -sf $DATA_DIR/AdGuardHome /usr/bin/AdGuardHome
 
-        # 销毁脚本自己及启动项，真正做到完全无痕
-        rm -f /etc/init.d/core_init
-        rm -f /etc/rc.d/S17core_init
-    fi
+            # 重启 ADG 让其读出真实版本并正常运行
+            /etc/init.d/AdGuardHome restart 2>/dev/null
+        fi
+
+        # eMMC 模式下的阅后即焚，不留一片云彩
+        if [ "$IS_EMMC" = "1" ]; then
+            rm -rf /usr/lib/core_backup
+            rm -f /etc/init.d/core_init
+            rm -f /etc/rc.d/S90core_init
+        fi
+    ) &
 }
 EOF
 chmod +x ${FILES_DIR}/etc/init.d/core_init
 # 设置开机自启
-ln -s ../init.d/core_init ${FILES_DIR}/etc/rc.d/S17core_init
+ln -s ../init.d/core_init ${FILES_DIR}/etc/rc.d/S90core_init
 
 
 # --- 基础配置优化脚本 ---
@@ -286,7 +292,7 @@ SYSCTL_EOF
 sysctl -p
 
 # 3. 设置 AdGuardHome 标准路径
-# 核心和工作目录全部指向软链接，由 core_init 在底层负责软链的真实验证
+# 此时不管软链指向 sda4 还是 mmcblk2p4，这个基础配置完美适用
 uci set AdGuardHome.AdGuardHome.binpath='/usr/bin/AdGuardHome/AdGuardHome' 2>/dev/null
 uci set AdGuardHome.AdGuardHome.workdir='/usr/bin/AdGuardHome' 2>/dev/null
 uci commit AdGuardHome 2>/dev/null

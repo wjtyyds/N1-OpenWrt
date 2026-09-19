@@ -136,24 +136,26 @@ jobs:
           sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=512/g' openwrt/.config
           grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=512" >> openwrt/.config
           
-          # 💡 [防爆盘] 强制砍掉极耗空间的 Shadowsocks-Rust，用其他代理核心代替
+          # [防爆盘] 强制砍掉 Shadowsocks-Rust
           sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client is not set/g' openwrt/.config
           sed -i 's/CONFIG_PACKAGE_shadowsocks-rust-sslocal=y/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/g' openwrt/.config
           
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
-              sed -i '/CONFIG_PACKAGE_luci-app-dockerman=y/d' openwrt/.config
-              sed -i '/CONFIG_PACKAGE_luci-lib-docker=y/d' openwrt/.config
-              sed -i '/CONFIG_PACKAGE_docker=y/d' openwrt/.config
-              sed -i '/CONFIG_PACKAGE_docker-compose=y/d' openwrt/.config
-              sed -i '/CONFIG_PACKAGE_dockerd=y/d' openwrt/.config
-              sed -i '/CONFIG_PACKAGE_containerd=y/d' openwrt/.config
-              sed -i '/CONFIG_PACKAGE_runc=y/d' openwrt/.config
-              sed -i '/CONFIG_DOCKER_NET_MACVLAN=y/d' openwrt/.config
-              sed -i '/CONFIG_DOCKER_STO_EXT4=y/d' openwrt/.config
+              # 💡 明确禁止 Docker 及其所有底层组件的编译 (防死灰复燃)
+              sed -i 's/CONFIG_PACKAGE_luci-app-dockerman=y/# CONFIG_PACKAGE_luci-app-dockerman is not set/g' openwrt/.config
+              sed -i 's/CONFIG_PACKAGE_luci-lib-docker=y/# CONFIG_PACKAGE_luci-lib-docker is not set/g' openwrt/.config
+              sed -i 's/CONFIG_PACKAGE_docker=y/# CONFIG_PACKAGE_docker is not set/g' openwrt/.config
+              sed -i 's/CONFIG_PACKAGE_docker-compose=y/# CONFIG_PACKAGE_docker-compose is not set/g' openwrt/.config
+              sed -i 's/CONFIG_PACKAGE_dockerd=y/# CONFIG_PACKAGE_dockerd is not set/g' openwrt/.config
+              sed -i 's/CONFIG_PACKAGE_containerd=y/# CONFIG_PACKAGE_containerd is not set/g' openwrt/.config
+              sed -i 's/CONFIG_PACKAGE_runc=y/# CONFIG_PACKAGE_runc is not set/g' openwrt/.config
+              sed -i 's/CONFIG_DOCKER_NET_MACVLAN=y/# CONFIG_DOCKER_NET_MACVLAN is not set/g' openwrt/.config
+              sed -i 's/CONFIG_DOCKER_STO_EXT4=y/# CONFIG_DOCKER_STO_EXT4 is not set/g' openwrt/.config
           
-              sed -i '/CONFIG_PACKAGE_luci-app-passwall=y/d' openwrt/.config
+              # 剔除 Passwall 及其关联配置
+              sed -i 's/CONFIG_PACKAGE_luci-app-passwall=y/# CONFIG_PACKAGE_luci-app-passwall is not set/g' openwrt/.config
               sed -i '/CONFIG_PACKAGE_luci-app-passwall_/d' openwrt/.config
-              sed -i '/CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y/d' openwrt/.config
+              sed -i 's/CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y/# CONFIG_PACKAGE_luci-i18n-passwall-zh-cn is not set/g' openwrt/.config
           fi
           
           cd openwrt
@@ -211,11 +213,11 @@ jobs:
           ROOTFS_FILE=$(find ../openwrt/bin/targets/ -type f -name "*-rootfs.tar.gz" | head -n 1)
           sudo mv "$ROOTFS_FILE" ./openwrt-armvirt-64-default-rootfs.tar.gz
           
-          # 💡 创建避开编译冲突的安全备份库
+          # 创建准备注入的目录
           mkdir -p inject_tmp/root inject_tmp/etc inject_tmp/usr/lib/core_backup
           
           # ----------------------------------------------------
-          # 1. 提取官方最新 AdGuardHome 放入安全备份库
+          # 1. 提取官方最新 AdGuardHome 放入系统深处隐藏备用
           # ----------------------------------------------------
           echo "获取 AdGuardHome 最新稳定版..."
           AGH_API="https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest"
@@ -232,7 +234,7 @@ jobs:
           fi
 
           # ----------------------------------------------------
-          # 2. 提取最新 Lucky 放入安全备份库
+          # 2. 提取最新 Lucky 存入临时目录，等待暴击直写
           # ----------------------------------------------------
           echo "获取 Lucky 最新版..."
           if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
@@ -248,8 +250,7 @@ jobs:
               tar -xzf /tmp/lucky.tar.gz -C /tmp/lucky_extract
               LUCKY_BIN=$(find /tmp/lucky_extract -type f -name "lucky" | head -n 1)
               if [ -n "$LUCKY_BIN" ]; then
-                  mv "$LUCKY_BIN" inject_tmp/usr/lib/core_backup/lucky
-                  chmod 755 inject_tmp/usr/lib/core_backup/lucky
+                  cp "$LUCKY_BIN" /tmp/lucky_core_new
               fi
           fi
 
@@ -327,10 +328,23 @@ jobs:
               ln -sf /usr/sbin/openwrt-install-amlogic inject_tmp/root/install-to-emmc.sh
           fi
           
-          # 💡 将 inject_tmp 内的全部文件打包覆盖进固件 (绝无冲突)
+          # 注入常规文件
           cd inject_tmp
           sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
           cd ..
+          
+          # 💡 [暴击机制]：绕过 opkg 阻拦，强行物理剔除压缩包里的旧版 Lucky 并注入新版！
+          if [ -f /tmp/lucky_core_new ]; then
+              echo "暴力剔除旧版 Lucky 并注入新版..."
+              sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar usr/bin/lucky 2>/dev/null || true
+              sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar ./usr/bin/lucky 2>/dev/null || true
+              mkdir -p inject_lucky/usr/bin
+              mv /tmp/lucky_core_new inject_lucky/usr/bin/lucky
+              chmod 755 inject_lucky/usr/bin/lucky
+              cd inject_lucky
+              sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
+              cd ..
+          fi
           
           # 💡 [去重] 强行修复可能重复的 balethirq.pl 逻辑
           mkdir -p /tmp/rc_fix
