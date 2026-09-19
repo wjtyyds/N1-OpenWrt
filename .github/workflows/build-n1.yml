@@ -137,6 +137,10 @@ jobs:
           sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=512/g' openwrt/.config
           grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=512" >> openwrt/.config
           
+          # 💡 [防爆盘] 强制砍掉极耗空间的 Shadowsocks-Rust，用其他代理核心代替
+          sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client is not set/g' openwrt/.config
+          sed -i 's/CONFIG_PACKAGE_shadowsocks-rust-sslocal=y/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/g' openwrt/.config
+          
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
               # 剔除 Dockerman 及 Docker 组件
               sed -i '/CONFIG_PACKAGE_luci-app-dockerman=y/d' openwrt/.config
@@ -218,7 +222,7 @@ jobs:
           # 💡 原生物理注入阶段 (彻底避开编译期文件冲突)
           # ----------------------------------------------------
           
-          # 1. 提取官方最新 AdGuardHome
+          # 1. 提取官方最新 AdGuardHome 
           echo "获取 AdGuardHome 最新稳定版..."
           AGH_API="https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest"
           AGH_URL=$(curl -s "$AGH_API" | grep "browser_download_url" | grep "linux_arm64.tar.gz" | head -n 1 | cut -d '"' -f 4)
@@ -228,12 +232,14 @@ jobs:
               tar -xzf /tmp/agh.tar.gz -C /tmp/agh_extract
               AGH_BIN=$(find /tmp/agh_extract -type f -name "AdGuardHome" | head -n 1)
               if [ -n "$AGH_BIN" ]; then
-                  mv "$AGH_BIN" inject_tmp/usr/lib/.adg_core_tmp
-                  chmod 755 inject_tmp/usr/lib/.adg_core_tmp
+                  # 放入真实路径等待软链，保证 U盘可以显示版本
+                  mkdir -p inject_tmp/usr/bin/AdGuardHome
+                  mv "$AGH_BIN" inject_tmp/usr/bin/AdGuardHome/AdGuardHome_core
+                  chmod 755 inject_tmp/usr/bin/AdGuardHome/AdGuardHome_core
               fi
           fi
 
-          # 2. 提取最新 Lucky
+          # 2. 提取最新 Lucky (暂存为 lucky_new 等待首次开机时系统覆盖)
           echo "获取 Lucky 最新版..."
           if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
               LUCKY_PATTERN="Linux_arm64_wanji_docker.tar.gz"
@@ -248,8 +254,7 @@ jobs:
               tar -xzf /tmp/lucky.tar.gz -C /tmp/lucky_extract
               LUCKY_BIN=$(find /tmp/lucky_extract -type f -name "lucky" | head -n 1)
               if [ -n "$LUCKY_BIN" ]; then
-                  mv "$LUCKY_BIN" inject_tmp/usr/bin/lucky
-                  chmod 755 inject_tmp/usr/bin/lucky
+                  mv "$LUCKY_BIN" inject_tmp/usr/bin/lucky_new
               fi
           fi
 
@@ -263,7 +268,6 @@ jobs:
               if [ -f /tmp/clash_meta_tmp/clash ]; then
                   mv /tmp/clash_meta_tmp/clash inject_tmp/etc/openclash/core/clash_meta
                   chmod 755 inject_tmp/etc/openclash/core/clash_meta
-                  echo "✅ OpenClash Meta 内核专属注入成功！"
               fi
           fi
           
@@ -310,12 +314,10 @@ jobs:
           
           sudo gunzip -f ./openwrt-armvirt-64-default-rootfs.tar.gz
           
-          # 极简纯净的 rc.local
+          # 💡 极简纯净的 rc.local
           cat << 'EOF' > inject_tmp/etc/rc.local
           # Put your custom commands here that should be executed once
           # the system init finished. By default this file does nothing.
-          
-          /usr/sbin/balethirq.pl
           
           exit 0
           EOF
@@ -330,7 +332,18 @@ jobs:
           
           cd inject_tmp
           sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
-          cd ..
+          
+          # 💡 [去重] 强行修复可能重复的 balethirq.pl 逻辑
+          mkdir -p /tmp/rc_fix
+          cd /tmp/rc_fix
+          sudo tar -xf $GITHUB_WORKSPACE/packit/openwrt-armvirt-64-default-rootfs.tar etc/rc.local || true
+          if [ -f etc/rc.local ]; then
+              sudo sed -i '/balethirq.pl/d' etc/rc.local
+              sudo sed -i '/exit 0/i \/usr\/sbin\/balethirq.pl' etc/rc.local
+              sudo tar -rvf $GITHUB_WORKSPACE/packit/openwrt-armvirt-64-default-rootfs.tar etc/rc.local > /dev/null 2>&1
+          fi
+          
+          cd $GITHUB_WORKSPACE/packit
           sudo gzip -9 ./openwrt-armvirt-64-default-rootfs.tar
           
           sudo chmod +x mk_s905d_n1.sh

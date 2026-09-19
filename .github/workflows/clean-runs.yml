@@ -12,39 +12,41 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v4
 
-      - name: 🗑️ Delete Failed Runs & Clean History
+      - name: 🗑️ 精准清理运行记录
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "🔍 开始扫描流水线记录..."
           
-          # ==========================================
-          # 1. 查杀所有固件的残次品（失败/取消），绝对保留成功！
-          # ==========================================
-          run_ids=$(gh run list --limit 100 --json databaseId,status,conclusion --jq '.[] | select(.status == "completed" and .conclusion != "success") | .databaseId')
-          
-          if [ -n "$run_ids" ]; then
-            echo "🔥 发现残次品记录，开始抹杀："
-            for id in $run_ids; do
+          # 1. 斩杀所有固件的残次品（失败/取消的记录）
+          bad_runs=$(gh run list --limit 100 --json databaseId,status,conclusion --jq '.[] | select(.status == "completed" and .conclusion != "success") | .databaseId')
+          if [ -n "$bad_runs" ]; then
+            echo "🔥 发现残次品记录，开始清理："
+            for id in $bad_runs; do
+              echo "删除失败/取消记录 ID: $id"
               gh run delete $id || true
             done
           fi
 
-          # ==========================================
-          # 2. 查杀“清理脚本”自己的所有历史前任！
-          # ==========================================
-          # 专门过滤出 clean-runs.yml 这个工作流的所有已完成记录
-          cleaner_ids=$(gh run list --workflow "clean-runs.yml" --limit 100 --json databaseId,status --jq '.[] | select(.status == "completed") | .databaseId')
-          
-          if [ -n "$cleaner_ids" ]; then
-            echo "👻 发现历史清理记录，开始毁尸灭迹："
-            for self_id in $cleaner_ids; do
-              # 增加保险机制：绝对不碰当前的自己
+          # 2. 斩杀本清理脚本以前成功执行的历史记录（防止满屏都是清理成功的记录）
+          cleaner_runs=$(gh run list --workflow "${{ github.workflow }}" --limit 100 --json databaseId,status,conclusion --jq '.[] | select(.status == "completed" and .conclusion == "success") | .databaseId')
+          if [ -n "$cleaner_runs" ]; then
+            echo "👻 发现历史清理记录，开始自我销毁："
+            for self_id in $cleaner_runs; do
+              # 保险：如果是当前的自己，跳过不删（GitHub 限制）
               if [ "$self_id" != "${{ github.run_id }}" ]; then
-                echo "正在删除历史清理记录 ID: $self_id"
+                echo "删除历史清理记录 ID: $self_id"
                 gh run delete $self_id || true
               fi
             done
           fi
           
-          echo "✅ 全部清理完成！前任清理记录已销毁，固件成功记录完好无损。"
+          echo "✅ 清理完毕！其他固件的成功编译记录完好无损。"
+
+      - name: 👻 终极自毁 (阅后即焚)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "✅ 脏活累活干完了，现在我将销毁我自己的本次运行记录..."
+          # 利用自身的 run_id 执行自毁操作，事了拂衣去
+          gh run delete ${{ github.run_id }} || true

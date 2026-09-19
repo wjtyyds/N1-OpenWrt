@@ -191,8 +191,9 @@ FILES_DIR="package/base-files/files"
 mkdir -p ${FILES_DIR}/etc/uci-defaults
 mkdir -p ${FILES_DIR}/etc/init.d
 mkdir -p ${FILES_DIR}/etc/rc.d
+mkdir -p ${FILES_DIR}/usr/bin
 
-# 【核心暗杀服务】：U盘不动如山，eMMC搬运后彻底自杀抹除痕迹
+# 【智能挂载守护】：负责后期 eMMC 核心搬运
 cat << 'EOF' > ${FILES_DIR}/etc/init.d/n1_core_init
 #!/bin/sh /etc/rc.common
 START=99
@@ -203,27 +204,22 @@ start() {
         ROOT_DEV=$(mount | grep ' /rom ' | awk '{print $1}')
         [ -z "$ROOT_DEV" ] && ROOT_DEV=$(mount | grep -E ' / ' | awk '{print $1}')
 
+        # 仅在 eMMC 环境下执行核心转移
         if echo "$ROOT_DEV" | grep -q "mmcblk"; then
-            if [ -x /etc/init.d/dockerd ]; then
-                /etc/init.d/dockerd enable
-                /etc/init.d/dockerd start
-            fi
-
-            # AdGuardHome 专属路径搬运（绝不更改你的设计）
-            if [ -f /usr/lib/.adg_core_tmp ]; then
+            if [ -f /usr/bin/AdGuardHome/AdGuardHome_core ]; then
                 mkdir -p /mnt/mmcblk2p4/AdGuardHome
-                mv /usr/lib/.adg_core_tmp /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
+                # 移动核心文件到真正的数据盘
+                mv /usr/bin/AdGuardHome/AdGuardHome_core /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
                 chmod 755 /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
+
+                # 修正软链接指向真正的存储路径
+                rm -f /usr/bin/AdGuardHome/AdGuardHome
+                ln -s /mnt/mmcblk2p4/AdGuardHome/AdGuardHome /usr/bin/AdGuardHome/AdGuardHome
             fi
 
-            # 搬运完成后抹杀自己
+            # eMMC 搬运完毕，自我毁灭
             rm -f /etc/init.d/n1_core_init
             rm -f /etc/rc.d/S99n1_core_init
-        else
-            if [ -x /etc/init.d/dockerd ]; then
-                /etc/init.d/dockerd disable
-                /etc/init.d/dockerd stop 2>/dev/null
-            fi
         fi
     ) &
 }
@@ -232,9 +228,11 @@ chmod +x ${FILES_DIR}/etc/init.d/n1_core_init
 ln -s ../init.d/n1_core_init ${FILES_DIR}/etc/rc.d/S99n1_core_init
 
 
-# --- 基础配置与网桥优化脚本 (对所有人通用) ---
+# --- 核心初始化脚本 (解决启动覆盖与防丢包问题) ---
 cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/99_custom_setup
 #!/bin/sh
+
+# 1. OAF 模块加载
 if [ -f /root/oaf.ko ]; then
     KVER=$(uname -r)
     mkdir -p /lib/modules/$KVER
@@ -244,7 +242,8 @@ if [ -f /root/oaf.ko ]; then
     modprobe oaf
 fi
 
-# 极其隐蔽地追加网桥防丢包参数到底层文件
+# 2. 极致洁癖的 sysctl 注入（无论有无旧配置，先清理干净，再追加！）
+sed -i '/net.bridge.bridge-nf-call/d' /etc/sysctl.conf
 cat << 'SYSCTL_EOF' >> /etc/sysctl.conf
 
 # Network routing & bridge optimization
@@ -253,25 +252,39 @@ net.bridge.bridge-nf-call-ip6tables=0
 net.bridge.bridge-nf-call-arptables=0
 SYSCTL_EOF
 sysctl -p
-EOF
 
-if [[ "$FIRMWARE_TYPE" == lede* ]]; then
-    cat << 'EOF' >> ${FILES_DIR}/etc/uci-defaults/99_custom_setup
-uci delete uhttpd.main.listen_https 2>/dev/null
-uci commit uhttpd 2>/dev/null
-/etc/init.d/uhttpd restart 2>/dev/null
-EOF
+# 3. 核心无痕替换 (首次启动强行覆盖包管理器版本)
+if [ -f /usr/bin/lucky_new ]; then
+    mv /usr/bin/lucky_new /usr/bin/lucky
+    chmod 755 /usr/bin/lucky
 fi
 
-# 你的专属配置路径（绝对保留）
-cat << 'EOF' >> ${FILES_DIR}/etc/uci-defaults/99_custom_setup
+# 4. AdGuardHome 专属路径优化 (巧妙保证U盘能显示版本)
+mkdir -p /usr/bin/AdGuardHome
+# U盘启动时，软链接指向内部临时核心，界面不报错
+ln -s /usr/bin/AdGuardHome/AdGuardHome_core /usr/bin/AdGuardHome/AdGuardHome
 uci set AdGuardHome.AdGuardHome.binpath='/usr/bin/AdGuardHome/AdGuardHome' 2>/dev/null
 uci set AdGuardHome.AdGuardHome.workdir='/usr/bin/AdGuardHome' 2>/dev/null
 uci commit AdGuardHome 2>/dev/null
+
+# 5. 脚本使命完成，自毁
+rm -f /etc/uci-defaults/99_custom_setup
 EOF
 
+if [[ "$FIRMWARE_TYPE" == lede* ]]; then
+    # LEDE 特有
+    cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/98_lede_setup
+#!/bin/sh
+uci delete uhttpd.main.listen_https 2>/dev/null
+uci commit uhttpd 2>/dev/null
+/etc/init.d/uhttpd restart 2>/dev/null
+rm -f /etc/uci-defaults/98_lede_setup
+EOF
+fi
+
 if [ "$BUILD_TYPE" == "personal" ]; then
-    cat << EOF >> ${FILES_DIR}/etc/uci-defaults/99_custom_setup
+    cat << EOF > ${FILES_DIR}/etc/uci-defaults/97_personal_setup
+#!/bin/sh
 uci delete network.lan.type 2>/dev/null
 uci set network.lan.device='eth0'
 uci set network.lan.ifname='eth0'
@@ -300,5 +313,6 @@ fi
 
 uci set AdGuardHome.AdGuardHome.configpath='/etc/AdGuardHome.yaml'
 uci commit AdGuardHome
+rm -f /etc/uci-defaults/97_personal_setup
 EOF
 fi
