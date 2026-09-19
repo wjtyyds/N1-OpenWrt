@@ -45,7 +45,8 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    # 💡 切换为 ubuntu-22.04，系统底层占用更小，能腾出更多空间给 Rust
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
@@ -75,7 +76,7 @@ jobs:
           echo "开始物理清理，腾出空间..."
           docker rmi -f $(docker images -q) 2>/dev/null || true
           [[ -n "${AGENT_TOOLSDIRECTORY}" ]] && sudo rm -rf "${AGENT_TOOLSDIRECTORY}"
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android 2>/dev/null
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL 2>/dev/null
           sudo swapoff -a
           sudo rm -f /swapfile /mnt/swapfile
           
@@ -83,8 +84,8 @@ jobs:
           sudo apt-get -y update
           sudo apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
           
-          echo "安装核心依赖 (采用 Ophub 的 24.04 动态依赖列表)..."
-          sudo apt-get -y install $(curl -fsSL https://ophub.org/ubuntu2404-make-openwrt-depends)
+          echo "安装核心依赖 (采用 Ophub 的 22.04 动态依赖列表)..."
+          sudo apt-get -y install $(curl -fsSL https://ophub.org/ubuntu2204-make-openwrt-depends)
           
           echo "重载系统守护进程 (防假死核心)..."
           sudo systemctl daemon-reload
@@ -134,6 +135,10 @@ jobs:
           sed -i 's/CONFIG_KERNEL_DEBUG_KERNEL=y/# CONFIG_KERNEL_DEBUG_KERNEL is not set/g' openwrt/.config
           sed -i 's/CONFIG_GDB=y/# CONFIG_GDB is not set/g' openwrt/.config
           
+          # 💡 [网络防护]：强行注入国内 Go 模块代理，防 docker-compose 编译超时报错
+          sed -i 's/CONFIG_GOPROXY=".*"/CONFIG_GOPROXY="https:\/\/goproxy.io,direct"/g' openwrt/.config
+          grep -q "CONFIG_GOPROXY=" openwrt/.config || echo 'CONFIG_GOPROXY="https://goproxy.io,direct"' >> openwrt/.config
+          
           sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=512/g' openwrt/.config
           grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=512" >> openwrt/.config
           
@@ -161,6 +166,11 @@ jobs:
       - name: Download Package & Compile
         run: |
           cd openwrt
+          
+          # 💡 [终极杀招：释放 3GB+ 空间保 Rust]：强行删掉所有插件库的冗余 .git 历史文件夹
+          echo "清理冗余 .git 历史以极限榨取硬盘空间..."
+          find ./feeds -type d -name ".git" -exec rm -rf {} + 2>/dev/null || true
+          
           make download -j8
           make -j$(nproc) || make -j1 || make -j1 V=s
 
@@ -213,7 +223,7 @@ jobs:
           # 💡 原生物理注入阶段 (彻底避开编译期文件冲突)
           # ----------------------------------------------------
           
-          # 1. 提取官方最新 AdGuardHome (屏蔽 -b 测试版)
+          # 1. 提取官方最新 AdGuardHome
           echo "获取 AdGuardHome 最新稳定版..."
           AGH_API="https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest"
           AGH_URL=$(curl -s "$AGH_API" | grep "browser_download_url" | grep "linux_arm64.tar.gz" | head -n 1 | cut -d '"' -f 4)
@@ -225,11 +235,10 @@ jobs:
               if [ -n "$AGH_BIN" ]; then
                   mv "$AGH_BIN" inject_tmp/usr/lib/.adg_core_tmp
                   chmod 755 inject_tmp/usr/lib/.adg_core_tmp
-                  echo "✅ AdGuardHome 下载完成并隐藏！"
               fi
           fi
 
-          # 2. 提取最新 Lucky (自动区分 Public 与 Personal)
+          # 2. 提取最新 Lucky
           echo "获取 Lucky 最新版..."
           if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
               LUCKY_PATTERN="Linux_arm64_wanji_docker.tar.gz"
@@ -244,26 +253,19 @@ jobs:
               tar -xzf /tmp/lucky.tar.gz -C /tmp/lucky_extract
               LUCKY_BIN=$(find /tmp/lucky_extract -type f -name "lucky" | head -n 1)
               if [ -n "$LUCKY_BIN" ]; then
-                  # 直接放入 usr/bin，tar -rvf 打包时会物理覆盖掉编译出来的旧版！
                   mv "$LUCKY_BIN" inject_tmp/usr/bin/lucky
                   chmod 755 inject_tmp/usr/bin/lucky
-                  echo "✅ Lucky 下载完成，准备强行覆盖！"
               fi
           fi
 
-          # 3. 提取最新 OpenClash 独尊 Meta 内核 (N1 专属 arm64 架构，源自官方稳定 master)
-          # 💡 [全新加入] 按照你的指示下载并放置到指定目录
+          # 3. 提取 OpenClash Meta 内核
           echo "获取 OpenClash Meta 内核..."
           mkdir -p inject_tmp/etc/openclash/core
-          
-          # 下载你指定的 arm64 版本的 Meta 内核
           wget -qO /tmp/clash_meta.tar.gz "https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz" || true
           if [ -f /tmp/clash_meta.tar.gz ]; then
-              # 先解压到临时目录
               mkdir -p /tmp/clash_meta_tmp
               tar -xzf /tmp/clash_meta.tar.gz -C /tmp/clash_meta_tmp/ || true
               if [ -f /tmp/clash_meta_tmp/clash ]; then
-                  # 重命名为 clash_meta 并移动到最终位置
                   mv /tmp/clash_meta_tmp/clash inject_tmp/etc/openclash/core/clash_meta
                   chmod 755 inject_tmp/etc/openclash/core/clash_meta
                   echo "✅ OpenClash Meta 内核专属注入成功！"
@@ -313,7 +315,7 @@ jobs:
           
           sudo gunzip -f ./openwrt-armvirt-64-default-rootfs.tar.gz
           
-          # 极简纯净的 rc.local，没有半句废话
+          # 极简纯净的 rc.local
           cat << 'EOF' > inject_tmp/etc/rc.local
           # Put your custom commands here that should be executed once
           # the system init finished. By default this file does nothing.
@@ -332,7 +334,6 @@ jobs:
           fi
           
           cd inject_tmp
-          # 强制物理覆盖并追加进镜像
           sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
           cd ..
           sudo gzip -9 ./openwrt-armvirt-64-default-rootfs.tar
