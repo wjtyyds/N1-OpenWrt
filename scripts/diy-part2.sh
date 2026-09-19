@@ -34,7 +34,6 @@ git clone -b 27.x --depth 1 https://github.com/sbwml/packages_lang_golang.git fe
 # 1. 核心大分流：各源码隔离操作 (插件卸载与拉取)
 # ==========================================
 
-# ----------------- [ LEDE 源码专属逻辑 ] -----------------
 if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     echo "====== 开始执行 LEDE 专属定制 ======"
 
@@ -81,9 +80,15 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     cd $GITHUB_WORKSPACE/openwrt
     rm -rf /tmp/OpenClash
 
-# ----------------- [ ImmortalWrt 源码专属逻辑 ] -----------------
 elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     echo "====== 开始执行 ImmortalWrt 专属定制 ======"
+
+    # 💡 解决 containerd 与 Go 1.27 的代差冲突
+    echo "--- 正在完整替换 Docker 组件引擎以适配 Go 1.27 ---"
+    rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose}
+    git clone --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
+    cp -r /tmp/imm_packages/utils/{docker,dockerd,containerd,runc,docker-compose} feeds/packages/utils/ || true
+    rm -rf /tmp/imm_packages
 
     if [ "$SOURCE_BRANCH" == "v25.12.1" ]; then
         rm -rf feeds/packages/lang/rust
@@ -135,9 +140,15 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     cd $GITHUB_WORKSPACE/openwrt
     rm -rf /tmp/OpenClash
 
-# ----------------- [ 官方 OpenWrt 源码专属逻辑 ] -----------------
 elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     echo "====== 开始执行 官方 OpenWrt 专属定制 ======"
+
+    # 💡 解决 containerd 与 Go 1.27 的代差冲突
+    echo "--- 正在完整替换 Docker 组件引擎以适配 Go 1.27 ---"
+    rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose}
+    git clone --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
+    cp -r /tmp/imm_packages/utils/{docker,dockerd,containerd,runc,docker-compose} feeds/packages/utils/ || true
+    rm -rf /tmp/imm_packages
 
     openwrt_conflict_plugins=(
         "adguardhome" "luci-app-adguardhome"
@@ -199,52 +210,54 @@ fi
 FILES_DIR="package/base-files/files"
 mkdir -p ${FILES_DIR}/etc/uci-defaults
 mkdir -p ${FILES_DIR}/etc/init.d
-mkdir -p ${FILES_DIR}/etc/rc.d
-mkdir -p ${FILES_DIR}/usr/bin
 
-# 💡【核心转移与暗杀服务】：严密感知环境，确保U盘不伤分毫，eMMC完美软链转移！
-cat << 'EOF' > ${FILES_DIR}/etc/init.d/n1_core_init
+# 💡【核心防死链与搬运服务】：内存欺骗大法 + eMMC精准落地与极致自毁
+cat << 'EOF' > ${FILES_DIR}/etc/init.d/core_init
 #!/bin/sh /etc/rc.common
 START=99
 
 start() {
     (
         sleep 5
-        IS_EMMC=0
         ROOT_PART=$(df -h / | tail -n1 | awk '{print $1}')
 
-        # 极度严谨的判断：系统根目录是否在 mmcblk (eMMC) 上
-        if echo "$ROOT_PART" | grep -q "mmcblk"; then
-            IS_EMMC=1
-        fi
+        # 检查是否藏有我们重命名的备用核心
+        if [ -f /usr/bin/AdGuardHome_core ]; then
+            if echo "$ROOT_PART" | grep -q "mmcblk"; then
+                # === eMMC 启动模式 ===
+                mkdir -p /mnt/mmcblk2p4/AdGuardHome
+                # 将备用核心真实转移到 eMMC 硬盘 (mv移动即删除原备份，省空间)
+                mv /usr/bin/AdGuardHome_core /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
+                chmod 755 /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
 
-        if [ "$IS_EMMC" = "1" ]; then
-            # 只有在 eMMC 启动时，才执行 AdGuardHome 文件夹转移和软链建立
-            if [ -d /usr/bin/AdGuardHome ] && [ ! -L /usr/bin/AdGuardHome ]; then
-                # 先停掉服务防止文件占用
-                /etc/init.d/AdGuardHome stop 2>/dev/null
+                # 重启 ADG 服务，由于原有软链接天然指向这里，所以直接起效
+                /etc/init.d/AdGuardHome restart 2>/dev/null
 
+                # 使命完成，彻底自杀 (阅后即焚)
+                rm -f /etc/init.d/core_init
+                rm -f /etc/rc.d/S99core_init
+            else
+                # === U 盘启动模式 (无限母盘保护) ===
+                # 内存开辟临时盘，欺骗 ADG 的软链接
                 mkdir -p /mnt/mmcblk2p4
-                rm -rf /mnt/mmcblk2p4/AdGuardHome  # 清理可能存在的旧残留
+                if ! mount | grep -q "/mnt/mmcblk2p4"; then
+                    mount -t tmpfs -o size=60M tmpfs /mnt/mmcblk2p4
+                fi
 
-                # 将实体文件夹搬移到数据盘
-                mv /usr/bin/AdGuardHome /mnt/mmcblk2p4/
+                mkdir -p /mnt/mmcblk2p4/AdGuardHome
+                # 复制(cp)备用核心进内存盘，母盘文件依然保留！
+                cp /usr/bin/AdGuardHome_core /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
+                chmod 755 /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
 
-                # 建立你专属的软链接
-                ln -sf /mnt/mmcblk2p4/AdGuardHome /usr/bin/AdGuardHome
-
-                /etc/init.d/AdGuardHome start 2>/dev/null
+                # 重启服务，U盘界面完美展示核心！
+                /etc/init.d/AdGuardHome restart 2>/dev/null
             fi
-
-            # 任务完成，自我毁灭，抹除一切痕迹
-            rm -f /etc/init.d/n1_core_init
-            rm -f /etc/rc.d/S99n1_core_init
         fi
     ) &
 }
 EOF
-chmod +x ${FILES_DIR}/etc/init.d/n1_core_init
-ln -s ../init.d/n1_core_init ${FILES_DIR}/etc/rc.d/S99n1_core_init
+chmod +x ${FILES_DIR}/etc/init.d/core_init
+ln -s ../init.d/core_init ${FILES_DIR}/etc/rc.d/S99core_init
 
 
 # --- 基础配置优化脚本 ---
@@ -271,11 +284,6 @@ net.bridge.bridge-nf-call-ip6tables=0
 net.bridge.bridge-nf-call-arptables=0
 SYSCTL_EOF
 sysctl -p
-
-# 3. AdGuardHome UCI 指定 (U盘直接读实体，eMMC转移后读软链，无缝衔接)
-uci set AdGuardHome.AdGuardHome.binpath='/usr/bin/AdGuardHome/AdGuardHome' 2>/dev/null
-uci set AdGuardHome.AdGuardHome.workdir='/usr/bin/AdGuardHome' 2>/dev/null
-uci commit AdGuardHome 2>/dev/null
 
 # 脚本使命完成，自毁
 rm -f /etc/uci-defaults/99_custom_setup

@@ -216,10 +216,10 @@ jobs:
           sudo mv "$ROOTFS_FILE" ./openwrt-armvirt-64-default-rootfs.tar.gz
           
           # 创建准备注入的目录
-          mkdir -p inject_tmp/root inject_tmp/etc inject_tmp/usr/bin inject_tmp/usr/lib
+          mkdir -p inject_tmp/root inject_tmp/etc inject_tmp/usr/bin
           
           # ----------------------------------------------------
-          # 💡 原生物理注入阶段：彻底抛弃开机移动脚本，全部物理直写覆盖！
+          # 💡 原生物理注入阶段 (绝对保留你的 OpenClash 设计)
           # ----------------------------------------------------
           
           # 1. 提取官方最新 AdGuardHome 
@@ -232,11 +232,9 @@ jobs:
               tar -xzf /tmp/agh.tar.gz -C /tmp/agh_extract
               AGH_BIN=$(find /tmp/agh_extract -type f -name "AdGuardHome" | head -n 1)
               if [ -n "$AGH_BIN" ]; then
-                  # 💡 物理覆盖第一弹：直接放到系统预设好的实体运行路径！
-                  # 这样U盘引导一开机，系统直接读的就是这个新版文件，没有任何报错延迟！
-                  mkdir -p inject_tmp/usr/bin/AdGuardHome
-                  mv "$AGH_BIN" inject_tmp/usr/bin/AdGuardHome/AdGuardHome
-                  chmod 755 inject_tmp/usr/bin/AdGuardHome/AdGuardHome
+                  # 💡 藏在 usr/bin/ 下并重命名，等开机脚本去挂载内存盘欺骗插件
+                  mv "$AGH_BIN" inject_tmp/usr/bin/AdGuardHome_core
+                  chmod 755 inject_tmp/usr/bin/AdGuardHome_core
               fi
           fi
 
@@ -255,13 +253,12 @@ jobs:
               tar -xzf /tmp/lucky.tar.gz -C /tmp/lucky_extract
               LUCKY_BIN=$(find /tmp/lucky_extract -type f -name "lucky" | head -n 1)
               if [ -n "$LUCKY_BIN" ]; then
-                  # 💡 物理覆盖第二弹：直接名字叫 lucky 强塞进去，打包时直接覆盖掉旧版！
-                  mv "$LUCKY_BIN" inject_tmp/usr/bin/lucky
-                  chmod 755 inject_tmp/usr/bin/lucky
+                  # 先放到临时文件夹，等会用 tar 暴力替换
+                  cp "$LUCKY_BIN" /tmp/lucky_core_new
               fi
           fi
 
-          # 3. 提取 OpenClash Meta 内核
+          # 3. 提取 OpenClash Meta 内核 (绝不改动你的原版完美逻辑)
           echo "获取 OpenClash Meta 内核..."
           mkdir -p inject_tmp/etc/openclash/core
           wget -qO /tmp/clash_meta.tar.gz "https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz" || true
@@ -333,8 +330,23 @@ jobs:
               ln -sf /usr/sbin/openwrt-install-amlogic inject_tmp/root/install-to-emmc.sh
           fi
           
+          # 注入常规文件
           cd inject_tmp
           sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
+          cd ..
+          
+          # 💡 [暴击机制]：绕过 opkg 阻拦，强行物理剔除压缩包里的旧版 Lucky 并注入新版！
+          if [ -f /tmp/lucky_core_new ]; then
+              echo "暴力剔除旧版 Lucky 并注入新版..."
+              sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar usr/bin/lucky 2>/dev/null || true
+              sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar ./usr/bin/lucky 2>/dev/null || true
+              mkdir -p inject_lucky/usr/bin
+              mv /tmp/lucky_core_new inject_lucky/usr/bin/lucky
+              chmod 755 inject_lucky/usr/bin/lucky
+              cd inject_lucky
+              sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
+              cd ..
+          fi
           
           # 💡 [去重] 强行修复可能重复的 balethirq.pl 逻辑
           mkdir -p /tmp/rc_fix
