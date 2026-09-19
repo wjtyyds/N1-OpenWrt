@@ -203,69 +203,6 @@ fi
 # ==========================================
 FILES_DIR="package/base-files/files"
 mkdir -p ${FILES_DIR}/etc/uci-defaults
-mkdir -p ${FILES_DIR}/etc/init.d
-mkdir -p ${FILES_DIR}/etc/rc.d
-
-# 💡【核心守护与软链管家】：START=90 精准卡点，智能分配 U盘/eMMC 物理数据盘！
-cat << 'EOF' > ${FILES_DIR}/etc/init.d/core_init
-#!/bin/sh /etc/rc.common
-START=90
-
-start() {
-    (
-        sleep 5
-        DATA_DIR=""
-        IS_EMMC=0
-
-        # 判断系统根目录是否在 eMMC
-        ROOT_PART=$(df -h / | tail -n1 | awk '{print $1}')
-        if echo "$ROOT_PART" | grep -q "mmcblk"; then
-            IS_EMMC=1
-        fi
-
-        # 动态探测真实数据盘挂载点 (优先 eMMC，其次 U盘)
-        if [ -d /mnt/mmcblk2p4 ]; then
-            DATA_DIR="/mnt/mmcblk2p4"
-        elif [ -d /mnt/sda4 ]; then
-            DATA_DIR="/mnt/sda4"
-        fi
-
-        # 如果找到了数据盘，开始核心调度
-        if [ -n "$DATA_DIR" ]; then
-            mkdir -p $DATA_DIR/AdGuardHome
-            # 如果存在我们打包的备用核心
-            if [ -f /usr/lib/core_backup/AdGuardHome_core ]; then
-                if [ "$IS_EMMC" = "1" ]; then
-                    # eMMC 模式：移动核心并删源文件
-                    mv /usr/lib/core_backup/AdGuardHome_core $DATA_DIR/AdGuardHome/AdGuardHome
-                else
-                    # U盘模式：复制核心，永久保留母盘的备份弹药
-                    cp /usr/lib/core_backup/AdGuardHome_core $DATA_DIR/AdGuardHome/AdGuardHome
-                fi
-                chmod 755 $DATA_DIR/AdGuardHome/AdGuardHome
-            fi
-
-            # 暴力破除死链，创建指向当前真实数据盘的新软链
-            rm -rf /usr/bin/AdGuardHome
-            ln -sf $DATA_DIR/AdGuardHome /usr/bin/AdGuardHome
-
-            # 重启 ADG 让其读出真实版本并正常运行
-            /etc/init.d/AdGuardHome restart 2>/dev/null
-        fi
-
-        # eMMC 模式下的阅后即焚，不留一片云彩
-        if [ "$IS_EMMC" = "1" ]; then
-            rm -rf /usr/lib/core_backup
-            rm -f /etc/init.d/core_init
-            rm -f /etc/rc.d/S90core_init
-        fi
-    ) &
-}
-EOF
-chmod +x ${FILES_DIR}/etc/init.d/core_init
-# 设置开机自启
-ln -s ../init.d/core_init ${FILES_DIR}/etc/rc.d/S90core_init
-
 
 # --- 基础配置优化脚本 ---
 cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/99_custom_setup
@@ -281,7 +218,7 @@ if [ -f /root/oaf.ko ]; then
     modprobe oaf
 fi
 
-# 2. 极致洁癖的 sysctl 注入（无论有无旧配置，先清理干净，再追加！）
+# 2. 极致洁癖的 sysctl 注入
 sed -i '/net.bridge.bridge-nf-call/d' /etc/sysctl.conf
 cat << 'SYSCTL_EOF' >> /etc/sysctl.conf
 
@@ -293,7 +230,6 @@ SYSCTL_EOF
 sysctl -p
 
 # 3. 设置 AdGuardHome 标准路径
-# 此时不管软链指向 sda4 还是 mmcblk2p4，这个基础配置完美适用
 uci set AdGuardHome.AdGuardHome.binpath='/usr/bin/AdGuardHome/AdGuardHome' 2>/dev/null
 uci set AdGuardHome.AdGuardHome.workdir='/usr/bin/AdGuardHome' 2>/dev/null
 uci commit AdGuardHome 2>/dev/null

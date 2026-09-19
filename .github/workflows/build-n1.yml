@@ -213,11 +213,11 @@ jobs:
           ROOTFS_FILE=$(find ../openwrt/bin/targets/ -type f -name "*-rootfs.tar.gz" | head -n 1)
           sudo mv "$ROOTFS_FILE" ./openwrt-armvirt-64-default-rootfs.tar.gz
           
-          # 创建准备注入的目录
-          mkdir -p inject_tmp/root inject_tmp/etc inject_tmp/usr/lib/core_backup
+          # 创建准备注入的目录 (新增隐藏弹药库与自启目录)
+          mkdir -p inject_tmp/root inject_tmp/etc inject_tmp/usr/lib/adg_core inject_tmp/usr/lib/lucky_core inject_tmp/etc/init.d inject_tmp/etc/rc.d
           
           # ----------------------------------------------------
-          # 1. 提取官方最新 AdGuardHome 放入系统深处隐藏备用
+          # 1. 提取官方最新 AdGuardHome 放入系统深处隐藏备用 (弹药库)
           # ----------------------------------------------------
           echo "获取 AdGuardHome 最新稳定版..."
           AGH_API="https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest"
@@ -228,13 +228,13 @@ jobs:
               tar -xzf /tmp/agh.tar.gz -C /tmp/agh_extract
               AGH_BIN=$(find /tmp/agh_extract -type f -name "AdGuardHome" | head -n 1)
               if [ -n "$AGH_BIN" ]; then
-                  mv "$AGH_BIN" inject_tmp/usr/lib/core_backup/AdGuardHome_core
-                  chmod 755 inject_tmp/usr/lib/core_backup/AdGuardHome_core
+                  mv "$AGH_BIN" inject_tmp/usr/lib/adg_core/AdGuardHome
+                  chmod 755 inject_tmp/usr/lib/adg_core/AdGuardHome
               fi
           fi
-
+          
           # ----------------------------------------------------
-          # 2. 提取最新 Lucky 存入临时目录，等待暴击直写
+          # 2. 提取最新 Lucky 放入弹药库备用
           # ----------------------------------------------------
           echo "获取 Lucky 最新版..."
           if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
@@ -250,12 +250,13 @@ jobs:
               tar -xzf /tmp/lucky.tar.gz -C /tmp/lucky_extract
               LUCKY_BIN=$(find /tmp/lucky_extract -type f -name "lucky" | head -n 1)
               if [ -n "$LUCKY_BIN" ]; then
-                  cp "$LUCKY_BIN" /tmp/lucky_core_new
+                  mv "$LUCKY_BIN" inject_tmp/usr/lib/lucky_core/lucky
+                  chmod 755 inject_tmp/usr/lib/lucky_core/lucky
               fi
           fi
-
+          
           # ----------------------------------------------------
-          # 3. 提取 OpenClash Meta 内核 (绝不改动你的原版完美逻辑)
+          # 3. 提取 OpenClash Meta 内核
           # ----------------------------------------------------
           echo "获取 OpenClash Meta 内核..."
           mkdir -p inject_tmp/etc/openclash/core
@@ -312,7 +313,86 @@ jobs:
           
           sudo gunzip -f ./openwrt-armvirt-64-default-rootfs.tar.gz
           
-          # 💡 极简纯净的 rc.local
+          # ----------------------------------------------------
+          # 6. 终极隐蔽：创建底层静默运行的服务 (兼容旧版 Docker 逻辑)
+          # ----------------------------------------------------
+          cat << 'EOF' > inject_tmp/etc/init.d/n1_boot_check
+          #!/bin/sh /etc/rc.common
+          START=99
+          
+          start() {
+              (
+                  sleep 5
+                  ROOT_DEV=$(df -h / | tail -n1 | awk '{print $1}')
+                  IS_EMMC=0
+          
+                  if echo "$ROOT_DEV" | grep -q "mmcblk"; then
+                      IS_EMMC=1
+                  fi
+          
+                  # [1] 找回旧版的 Docker 防爆盘逻辑
+                  if [ "$IS_EMMC" = "1" ]; then
+                      if [ -x /etc/init.d/dockerd ]; then
+                          /etc/init.d/dockerd enable
+                          /etc/init.d/dockerd start
+                      fi
+                  else
+                      if [ -x /etc/init.d/dockerd ]; then
+                          /etc/init.d/dockerd disable
+                          /etc/init.d/dockerd stop 2>/dev/null
+                      fi
+                  fi
+          
+                  # [2] Lucky 核心安全置换
+                  if [ -f /usr/lib/lucky_core/lucky ]; then
+                      cp -f /usr/lib/lucky_core/lucky /usr/bin/lucky
+                      chmod 755 /usr/bin/lucky
+                      /etc/init.d/lucky restart 2>/dev/null
+          
+                      # 阅后即焚 (仅限 eMMC)
+                      if [ "$IS_EMMC" = "1" ]; then
+                          rm -rf /usr/lib/lucky_core
+                      fi
+                  fi
+          
+                  # [3] AdGuardHome 核心置换
+                  if [ -f /usr/lib/adg_core/AdGuardHome ]; then
+                      if [ "$IS_EMMC" = "1" ] && [ -d /mnt/mmcblk2p4 ]; then
+                          DATA_DIR="/mnt/mmcblk2p4/AdGuardHome"
+                          mkdir -p "$DATA_DIR"
+                          cp -n /usr/lib/adg_core/AdGuardHome "$DATA_DIR/AdGuardHome"
+                          chmod 755 "$DATA_DIR/AdGuardHome"
+                          rm -rf /usr/bin/AdGuardHome
+                          ln -sf "$DATA_DIR" /usr/bin/AdGuardHome
+          
+                          # 阅后即焚 (仅限 eMMC)
+                          rm -rf /usr/lib/adg_core
+                      else
+                          DATA_DIR="/usr/bin/AdGuardHome_data"
+                          mkdir -p "$DATA_DIR"
+                          cp -n /usr/lib/adg_core/AdGuardHome "$DATA_DIR/AdGuardHome"
+                          chmod 755 "$DATA_DIR/AdGuardHome"
+                          rm -rf /usr/bin/AdGuardHome
+                          ln -sf "$DATA_DIR" /usr/bin/AdGuardHome
+                      fi
+                      /etc/init.d/AdGuardHome restart 2>/dev/null
+                  fi
+          
+                  # [4] 服务自毁：在 eMMC 完全部署后，抹除本脚本的一切痕迹
+                  if [ "$IS_EMMC" = "1" ]; then
+                      rm -f /etc/rc.d/S99n1_boot_check
+                      rm -f /etc/init.d/n1_boot_check
+                  fi
+              ) &
+          }
+          EOF
+          chmod +x inject_tmp/etc/init.d/n1_boot_check
+          # 注册服务，令其开机后台自启
+          ln -sf ../init.d/n1_boot_check inject_tmp/etc/rc.d/S99n1_boot_check
+          
+          # ----------------------------------------------------
+          # 7. 伪装用的原生 rc.local，后台界面只会显示这两行干净的代码
+          # ----------------------------------------------------
           cat << 'EOF' > inject_tmp/etc/rc.local
           # Put your custom commands here that should be executed once
           # the system init finished. By default this file does nothing.
@@ -332,19 +412,6 @@ jobs:
           cd inject_tmp
           sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
           cd ..
-          
-          # 💡 [暴击机制]：绕过 opkg 阻拦，强行物理剔除压缩包里的旧版 Lucky 并注入新版！
-          if [ -f /tmp/lucky_core_new ]; then
-              echo "暴力剔除旧版 Lucky 并注入新版..."
-              sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar usr/bin/lucky 2>/dev/null || true
-              sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar ./usr/bin/lucky 2>/dev/null || true
-              mkdir -p inject_lucky/usr/bin
-              mv /tmp/lucky_core_new inject_lucky/usr/bin/lucky
-              chmod 755 inject_lucky/usr/bin/lucky
-              cd inject_lucky
-              sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
-              cd ..
-          fi
           
           # 💡 [去重] 强行修复可能重复的 balethirq.pl 逻辑
           mkdir -p /tmp/rc_fix
