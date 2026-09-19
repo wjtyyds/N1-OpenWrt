@@ -26,7 +26,6 @@ mkdir -p package/custom
 # ==========================================
 echo "正在替换 Golang 源码为 27.x (Go 1.27) 稳定版本..."
 rm -rf feeds/packages/lang/golang
-# 💡 精准指定拉取 27.x 分支
 git clone -b 27.x --depth 1 https://github.com/sbwml/packages_lang_golang.git feeds/packages/lang/golang
 
 ./scripts/feeds install -a -f
@@ -203,31 +202,41 @@ mkdir -p ${FILES_DIR}/etc/init.d
 mkdir -p ${FILES_DIR}/etc/rc.d
 mkdir -p ${FILES_DIR}/usr/bin
 
-# 【核心暗杀服务】：U盘不动如山，eMMC搬运后彻底自杀抹除痕迹
+# 💡【核心转移与暗杀服务】：严密感知环境，确保U盘不伤分毫，eMMC完美软链转移！
 cat << 'EOF' > ${FILES_DIR}/etc/init.d/n1_core_init
 #!/bin/sh /etc/rc.common
 START=99
 
 start() {
     (
-        sleep 3
-        ROOT_DEV=$(mount | grep ' /rom ' | awk '{print $1}')
-        [ -z "$ROOT_DEV" ] && ROOT_DEV=$(mount | grep -E ' / ' | awk '{print $1}')
+        sleep 5
+        IS_EMMC=0
+        ROOT_PART=$(df -h / | tail -n1 | awk '{print $1}')
 
-        # 仅在 eMMC 环境下执行核心转移
-        if echo "$ROOT_DEV" | grep -q "mmcblk"; then
-            if [ -f /usr/bin/AdGuardHome/AdGuardHome_core ]; then
-                mkdir -p /mnt/mmcblk2p4/AdGuardHome
-                # 移动核心文件到真正的数据盘
-                mv /usr/bin/AdGuardHome/AdGuardHome_core /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
-                chmod 755 /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
+        # 极度严谨的判断：系统根目录是否在 mmcblk (eMMC) 上
+        if echo "$ROOT_PART" | grep -q "mmcblk"; then
+            IS_EMMC=1
+        fi
 
-                # 修正软链接指向真正的存储路径
-                rm -f /usr/bin/AdGuardHome/AdGuardHome
-                ln -s /mnt/mmcblk2p4/AdGuardHome/AdGuardHome /usr/bin/AdGuardHome/AdGuardHome
+        if [ "$IS_EMMC" = "1" ]; then
+            # 只有在 eMMC 启动时，才执行 AdGuardHome 文件夹转移和软链建立
+            if [ -d /usr/bin/AdGuardHome ] && [ ! -L /usr/bin/AdGuardHome ]; then
+                # 先停掉服务防止文件占用
+                /etc/init.d/AdGuardHome stop 2>/dev/null
+
+                mkdir -p /mnt/mmcblk2p4
+                rm -rf /mnt/mmcblk2p4/AdGuardHome  # 清理可能存在的旧残留
+
+                # 将实体文件夹搬移到数据盘
+                mv /usr/bin/AdGuardHome /mnt/mmcblk2p4/
+
+                # 建立你专属的软链接
+                ln -sf /mnt/mmcblk2p4/AdGuardHome /usr/bin/AdGuardHome
+
+                /etc/init.d/AdGuardHome start 2>/dev/null
             fi
 
-            # eMMC 搬运完毕，自我毁灭
+            # 任务完成，自我毁灭，抹除一切痕迹
             rm -f /etc/init.d/n1_core_init
             rm -f /etc/rc.d/S99n1_core_init
         fi
@@ -238,7 +247,7 @@ chmod +x ${FILES_DIR}/etc/init.d/n1_core_init
 ln -s ../init.d/n1_core_init ${FILES_DIR}/etc/rc.d/S99n1_core_init
 
 
-# --- 核心初始化脚本 (解决启动覆盖与防丢包问题) ---
+# --- 基础配置优化脚本 ---
 cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/99_custom_setup
 #!/bin/sh
 
@@ -263,21 +272,12 @@ net.bridge.bridge-nf-call-arptables=0
 SYSCTL_EOF
 sysctl -p
 
-# 3. 核心无痕替换 (首次启动强行覆盖包管理器编译的旧版本)
-if [ -f /usr/bin/lucky_new ]; then
-    mv /usr/bin/lucky_new /usr/bin/lucky
-    chmod 755 /usr/bin/lucky
-fi
-
-# 4. AdGuardHome 专属路径优化 (巧妙保证U盘能显示版本)
-mkdir -p /usr/bin/AdGuardHome
-# U盘启动时，软链接指向内部临时核心，界面不报错能读出版本
-ln -sf /usr/bin/AdGuardHome/AdGuardHome_core /usr/bin/AdGuardHome/AdGuardHome
+# 3. AdGuardHome UCI 指定 (U盘直接读实体，eMMC转移后读软链，无缝衔接)
 uci set AdGuardHome.AdGuardHome.binpath='/usr/bin/AdGuardHome/AdGuardHome' 2>/dev/null
 uci set AdGuardHome.AdGuardHome.workdir='/usr/bin/AdGuardHome' 2>/dev/null
 uci commit AdGuardHome 2>/dev/null
 
-# 5. 脚本使命完成，自毁
+# 脚本使命完成，自毁
 rm -f /etc/uci-defaults/99_custom_setup
 EOF
 

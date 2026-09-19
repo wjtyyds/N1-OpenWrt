@@ -219,7 +219,7 @@ jobs:
           mkdir -p inject_tmp/root inject_tmp/etc inject_tmp/usr/bin inject_tmp/usr/lib
           
           # ----------------------------------------------------
-          # 💡 原生物理注入阶段 (彻底避开编译期文件冲突)
+          # 💡 原生物理注入阶段：彻底抛弃开机移动脚本，全部物理直写覆盖！
           # ----------------------------------------------------
           
           # 1. 提取官方最新 AdGuardHome 
@@ -232,14 +232,15 @@ jobs:
               tar -xzf /tmp/agh.tar.gz -C /tmp/agh_extract
               AGH_BIN=$(find /tmp/agh_extract -type f -name "AdGuardHome" | head -n 1)
               if [ -n "$AGH_BIN" ]; then
-                  # 放入真实路径等待软链，保证 U盘可以显示版本
+                  # 💡 物理覆盖第一弹：直接放到系统预设好的实体运行路径！
+                  # 这样U盘引导一开机，系统直接读的就是这个新版文件，没有任何报错延迟！
                   mkdir -p inject_tmp/usr/bin/AdGuardHome
-                  mv "$AGH_BIN" inject_tmp/usr/bin/AdGuardHome/AdGuardHome_core
-                  chmod 755 inject_tmp/usr/bin/AdGuardHome/AdGuardHome_core
+                  mv "$AGH_BIN" inject_tmp/usr/bin/AdGuardHome/AdGuardHome
+                  chmod 755 inject_tmp/usr/bin/AdGuardHome/AdGuardHome
               fi
           fi
 
-          # 2. 提取最新 Lucky (暂存为 lucky_new 等待首次开机时系统覆盖)
+          # 2. 提取最新 Lucky 
           echo "获取 Lucky 最新版..."
           if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
               LUCKY_PATTERN="Linux_arm64_wanji_docker.tar.gz"
@@ -254,7 +255,9 @@ jobs:
               tar -xzf /tmp/lucky.tar.gz -C /tmp/lucky_extract
               LUCKY_BIN=$(find /tmp/lucky_extract -type f -name "lucky" | head -n 1)
               if [ -n "$LUCKY_BIN" ]; then
-                  mv "$LUCKY_BIN" inject_tmp/usr/bin/lucky_new
+                  # 💡 物理覆盖第二弹：直接名字叫 lucky 强塞进去，打包时直接覆盖掉旧版！
+                  mv "$LUCKY_BIN" inject_tmp/usr/bin/lucky
+                  chmod 755 inject_tmp/usr/bin/lucky
               fi
           fi
 
