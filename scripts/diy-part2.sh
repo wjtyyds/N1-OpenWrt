@@ -204,6 +204,7 @@ fi
 FILES_DIR="package/base-files/files"
 mkdir -p ${FILES_DIR}/etc/uci-defaults
 mkdir -p ${FILES_DIR}/etc/init.d
+mkdir -p ${FILES_DIR}/etc/rc.d
 
 # 💡【核心守护与软链管家】：START=90 精准卡点，智能分配 U盘/eMMC 物理数据盘！
 cat << 'EOF' > ${FILES_DIR}/etc/init.d/core_init
