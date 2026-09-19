@@ -314,7 +314,7 @@ jobs:
           sudo gunzip -f ./openwrt-armvirt-64-default-rootfs.tar.gz
           
           # ----------------------------------------------------
-          # 6. 终极隐蔽：创建底层静默运行的服务 (兼容旧版 Docker 逻辑)
+          # 6. 终极隐蔽：创建底层静默运行的服务 (修复Lucky占用报错，剔除Docker逻辑)
           # ----------------------------------------------------
           cat << 'EOF' > inject_tmp/etc/init.d/n1_boot_check
           #!/bin/sh /etc/rc.common
@@ -330,24 +330,13 @@ jobs:
                       IS_EMMC=1
                   fi
           
-                  # [1] 找回旧版的 Docker 防爆盘逻辑
-                  if [ "$IS_EMMC" = "1" ]; then
-                      if [ -x /etc/init.d/dockerd ]; then
-                          /etc/init.d/dockerd enable
-                          /etc/init.d/dockerd start
-                      fi
-                  else
-                      if [ -x /etc/init.d/dockerd ]; then
-                          /etc/init.d/dockerd disable
-                          /etc/init.d/dockerd stop 2>/dev/null
-                      fi
-                  fi
-          
-                  # [2] Lucky 核心安全置换
+                  # [1] Lucky 核心安全置换 (先停后删再复制，解决 Text file busy 报错)
                   if [ -f /usr/lib/lucky_core/lucky ]; then
+                      /etc/init.d/lucky stop 2>/dev/null
+                      rm -f /usr/bin/lucky
                       cp -f /usr/lib/lucky_core/lucky /usr/bin/lucky
                       chmod 755 /usr/bin/lucky
-                      /etc/init.d/lucky restart 2>/dev/null
+                      /etc/init.d/lucky start 2>/dev/null
           
                       # 阅后即焚 (仅限 eMMC)
                       if [ "$IS_EMMC" = "1" ]; then
@@ -355,7 +344,7 @@ jobs:
                       fi
                   fi
           
-                  # [3] AdGuardHome 核心置换
+                  # [2] AdGuardHome 核心置换
                   if [ -f /usr/lib/adg_core/AdGuardHome ]; then
                       if [ "$IS_EMMC" = "1" ] && [ -d /mnt/mmcblk2p4 ]; then
                           DATA_DIR="/mnt/mmcblk2p4/AdGuardHome"
@@ -378,7 +367,7 @@ jobs:
                       /etc/init.d/AdGuardHome restart 2>/dev/null
                   fi
           
-                  # [4] 服务自毁：在 eMMC 完全部署后，抹除本脚本的一切痕迹
+                  # [3] 服务自毁：在 eMMC 完全部署后，抹除本脚本的一切痕迹
                   if [ "$IS_EMMC" = "1" ]; then
                       rm -f /etc/rc.d/S99n1_boot_check
                       rm -f /etc/init.d/n1_boot_check
@@ -391,7 +380,7 @@ jobs:
           ln -sf ../init.d/n1_boot_check inject_tmp/etc/rc.d/S99n1_boot_check
           
           # ----------------------------------------------------
-          # 7. 伪装用的原生 rc.local，后台界面只会显示这两行干净的代码
+          # 4. 伪装用的原生 rc.local，后台界面只会显示这两行干净的代码
           # ----------------------------------------------------
           cat << 'EOF' > inject_tmp/etc/rc.local
           # Put your custom commands here that should be executed once
