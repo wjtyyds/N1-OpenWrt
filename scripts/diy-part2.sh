@@ -62,15 +62,14 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
     clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
+    # OpenClash 拉取逻辑
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-
     mkdir -p /tmp/OpenClash && cd /tmp/OpenClash
     git init
     git remote add origin "$OPENCLASH_REPO"
     git config core.sparseCheckout true
     echo "luci-app-openclash/*" >> .git/info/sparse-checkout
-
     if [ -n "$OPENCLASH_TAG" ]; then
         git pull --depth 1 origin "$OPENCLASH_TAG"
     else
@@ -83,7 +82,7 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
 elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     echo "====== 开始执行 ImmortalWrt 专属定制 ======"
 
-    # 💡 解决 containerd 与 Go 1.27 的代差冲突
+    # 💡 落实选项 1：解决 containerd 等与 Go 1.27 的链接报错
     echo "--- 正在完整替换 Docker 组件引擎以适配 Go 1.27 ---"
     rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose}
     git clone --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
@@ -122,15 +121,14 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
     clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
+    # OpenClash 拉取逻辑
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-
     mkdir -p /tmp/OpenClash && cd /tmp/OpenClash
     git init
     git remote add origin "$OPENCLASH_REPO"
     git config core.sparseCheckout true
     echo "luci-app-openclash/*" >> .git/info/sparse-checkout
-
     if [ -n "$OPENCLASH_TAG" ]; then
         git pull --depth 1 origin "$OPENCLASH_TAG"
     else
@@ -143,7 +141,7 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
 elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     echo "====== 开始执行 官方 OpenWrt 专属定制 ======"
 
-    # 💡 解决 containerd 与 Go 1.27 的代差冲突
+    # 💡 落实选项 1：解决 containerd 等与 Go 1.27 的链接报错
     echo "--- 正在完整替换 Docker 组件引擎以适配 Go 1.27 ---"
     rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose}
     git clone --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
@@ -176,15 +174,14 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
     clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
+    # OpenClash 拉取逻辑
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-
     mkdir -p /tmp/OpenClash && cd /tmp/OpenClash
     git init
     git remote add origin "$OPENCLASH_REPO"
     git config core.sparseCheckout true
     echo "luci-app-openclash/*" >> .git/info/sparse-checkout
-
     if [ -n "$OPENCLASH_TAG" ]; then
         git pull --depth 1 origin "$OPENCLASH_TAG"
     else
@@ -205,59 +202,62 @@ else
 fi
 
 # ==========================================
-# 2. 本地化环境与隐蔽自启服务注入
+# 2. 本地化环境与守护脚本注入
 # ==========================================
 FILES_DIR="package/base-files/files"
 mkdir -p ${FILES_DIR}/etc/uci-defaults
 mkdir -p ${FILES_DIR}/etc/init.d
 
-# 💡【核心防死链与搬运服务】：内存欺骗大法 + eMMC精准落地与极致自毁
+# 💡【核心防死链与调度脚本】：动态挂载点识别 + eMMC 骨灰级自毁
 cat << 'EOF' > ${FILES_DIR}/etc/init.d/core_init
 #!/bin/sh /etc/rc.common
-START=99
+# 设为17，优先级极高，赶在 AdGuardHome 等服务启动前完成调度
+START=17
 
 start() {
-    (
-        sleep 5
-        ROOT_PART=$(df -h / | tail -n1 | awk '{print $1}')
+    # 1. 动态获取真实数据盘挂载点 (U盘通常为 sda4, eMMC为 mmcblk2p4)
+    DATA_DIR=""
+    if [ -d /mnt/mmcblk2p4 ]; then
+        DATA_DIR="/mnt/mmcblk2p4"
+    elif [ -d /mnt/sda4 ]; then
+        DATA_DIR="/mnt/sda4"
+    fi
 
-        # 检查是否藏有我们重命名的备用核心
-        if [ -f /usr/bin/AdGuardHome_core ]; then
-            if echo "$ROOT_PART" | grep -q "mmcblk"; then
-                # === eMMC 启动模式 ===
-                mkdir -p /mnt/mmcblk2p4/AdGuardHome
-                # 将备用核心真实转移到 eMMC 硬盘 (mv移动即删除原备份，省空间)
-                mv /usr/bin/AdGuardHome_core /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
-                chmod 755 /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
-
-                # 重启 ADG 服务，由于原有软链接天然指向这里，所以直接起效
-                /etc/init.d/AdGuardHome restart 2>/dev/null
-
-                # 使命完成，彻底自杀 (阅后即焚)
-                rm -f /etc/init.d/core_init
-                rm -f /etc/rc.d/S99core_init
-            else
-                # === U 盘启动模式 (无限母盘保护) ===
-                # 内存开辟临时盘，欺骗 ADG 的软链接
-                mkdir -p /mnt/mmcblk2p4
-                if ! mount | grep -q "/mnt/mmcblk2p4"; then
-                    mount -t tmpfs -o size=60M tmpfs /mnt/mmcblk2p4
-                fi
-
-                mkdir -p /mnt/mmcblk2p4/AdGuardHome
-                # 复制(cp)备用核心进内存盘，母盘文件依然保留！
-                cp /usr/bin/AdGuardHome_core /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
-                chmod 755 /mnt/mmcblk2p4/AdGuardHome/AdGuardHome
-
-                # 重启服务，U盘界面完美展示核心！
-                /etc/init.d/AdGuardHome restart 2>/dev/null
-            fi
+    # 2. ADG 核心下发与动态软链机制
+    if [ -n "$DATA_DIR" ]; then
+        mkdir -p $DATA_DIR/AdGuardHome
+        # 只要存在备用核心库，就覆盖过去 (保障不管是U盘还是新写的eMMC，第一次都能拿最新版)
+        if [ -f /usr/lib/core_backup/AdGuardHome_core ]; then
+            cp -f /usr/lib/core_backup/AdGuardHome_core $DATA_DIR/AdGuardHome/AdGuardHome
+            chmod 755 $DATA_DIR/AdGuardHome/AdGuardHome
         fi
-    ) &
+
+        # 暴力清理死掉的软链或遗留文件，创建指向动态数据盘的新软链
+        rm -rf /usr/bin/AdGuardHome
+        ln -sf $DATA_DIR/AdGuardHome /usr/bin/AdGuardHome
+    fi
+
+    # 3. Lucky 核心开机覆盖
+    if [ -f /usr/lib/core_backup/lucky ]; then
+        cp -f /usr/lib/core_backup/lucky /usr/bin/lucky
+        chmod 755 /usr/bin/lucky
+    fi
+
+    # 4. 判断是否为 eMMC 启动，执行“阅后即焚”
+    ROOT_PART=$(df -h / | tail -n1 | awk '{print $1}')
+    if echo "$ROOT_PART" | grep -q "mmcblk"; then
+        # 真实 eMMC 落地完毕，销毁备用核心库以节省空间
+        rm -rf /usr/lib/core_backup
+
+        # 销毁脚本自己及启动项，真正做到完全无痕
+        rm -f /etc/init.d/core_init
+        rm -f /etc/rc.d/S17core_init
+    fi
 }
 EOF
 chmod +x ${FILES_DIR}/etc/init.d/core_init
-ln -s ../init.d/core_init ${FILES_DIR}/etc/rc.d/S99core_init
+# 设置开机自启
+ln -s ../init.d/core_init ${FILES_DIR}/etc/rc.d/S17core_init
 
 
 # --- 基础配置优化脚本 ---
@@ -284,6 +284,12 @@ net.bridge.bridge-nf-call-ip6tables=0
 net.bridge.bridge-nf-call-arptables=0
 SYSCTL_EOF
 sysctl -p
+
+# 3. 设置 AdGuardHome 标准路径
+# 核心和工作目录全部指向软链接，由 core_init 在底层负责软链的真实验证
+uci set AdGuardHome.AdGuardHome.binpath='/usr/bin/AdGuardHome/AdGuardHome' 2>/dev/null
+uci set AdGuardHome.AdGuardHome.workdir='/usr/bin/AdGuardHome' 2>/dev/null
+uci commit AdGuardHome 2>/dev/null
 
 # 脚本使命完成，自毁
 rm -f /etc/uci-defaults/99_custom_setup

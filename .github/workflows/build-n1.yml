@@ -79,14 +79,14 @@ jobs:
           sudo swapoff -a
           sudo rm -f /swapfile /mnt/swapfile
           
-          echo "更新软件源并清理大型无用包 (Ophub 稳定逻辑)..."
+          echo "更新软件源并清理大型无用包..."
           sudo apt-get -y update
           sudo apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
           
-          echo "安装核心依赖 (采用 Ophub 的 22.04 动态依赖列表)..."
+          echo "安装核心依赖..."
           sudo apt-get -y install $(curl -fsSL https://ophub.org/ubuntu2204-make-openwrt-depends)
           
-          echo "重载系统守护进程 (防假死核心)..."
+          echo "重载系统守护进程..."
           sudo systemctl daemon-reload
           
           echo "清理缓存..."
@@ -94,8 +94,7 @@ jobs:
           sudo apt-get clean
           
           sudo timedatectl set-timezone "Asia/Shanghai"
-          echo "✅ 环境安装完毕！当前磁盘剩余空间："
-          df -h
+          echo "✅ 环境安装完毕！"
 
       - name: Clone Source Code
         run: |
@@ -129,7 +128,7 @@ jobs:
         run: |
           cp configs/${{ env.FIRMWARE_LOWER }}.config openwrt/.config
           
-          # 强制关闭 Debug 调试和 GDB，大幅缩短编译时间并节省庞大的磁盘空间
+          # 强制关闭 Debug 调试和 GDB
           sed -i 's/CONFIG_KERNEL_DEBUG_INFO=y/# CONFIG_KERNEL_DEBUG_INFO is not set/g' openwrt/.config
           sed -i 's/CONFIG_KERNEL_DEBUG_KERNEL=y/# CONFIG_KERNEL_DEBUG_KERNEL is not set/g' openwrt/.config
           sed -i 's/CONFIG_GDB=y/# CONFIG_GDB is not set/g' openwrt/.config
@@ -142,7 +141,6 @@ jobs:
           sed -i 's/CONFIG_PACKAGE_shadowsocks-rust-sslocal=y/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/g' openwrt/.config
           
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
-              # 剔除 Dockerman 及 Docker 组件
               sed -i '/CONFIG_PACKAGE_luci-app-dockerman=y/d' openwrt/.config
               sed -i '/CONFIG_PACKAGE_luci-lib-docker=y/d' openwrt/.config
               sed -i '/CONFIG_PACKAGE_docker=y/d' openwrt/.config
@@ -153,7 +151,6 @@ jobs:
               sed -i '/CONFIG_DOCKER_NET_MACVLAN=y/d' openwrt/.config
               sed -i '/CONFIG_DOCKER_STO_EXT4=y/d' openwrt/.config
           
-              # 剔除 Passwall 及其关联配置
               sed -i '/CONFIG_PACKAGE_luci-app-passwall=y/d' openwrt/.config
               sed -i '/CONFIG_PACKAGE_luci-app-passwall_/d' openwrt/.config
               sed -i '/CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y/d' openwrt/.config
@@ -166,7 +163,6 @@ jobs:
         run: |
           cd openwrt
           
-          # 💡 强行删掉所有插件库的冗余 .git 历史文件夹以防爆盘
           echo "清理冗余 .git 历史以极限榨取硬盘空间..."
           find ./feeds -type d -name ".git" -exec rm -rf {} + 2>/dev/null || true
           
@@ -215,14 +211,12 @@ jobs:
           ROOTFS_FILE=$(find ../openwrt/bin/targets/ -type f -name "*-rootfs.tar.gz" | head -n 1)
           sudo mv "$ROOTFS_FILE" ./openwrt-armvirt-64-default-rootfs.tar.gz
           
-          # 创建准备注入的目录
-          mkdir -p inject_tmp/root inject_tmp/etc inject_tmp/usr/bin
+          # 💡 创建避开编译冲突的安全备份库
+          mkdir -p inject_tmp/root inject_tmp/etc inject_tmp/usr/lib/core_backup
           
           # ----------------------------------------------------
-          # 💡 原生物理注入阶段 (绝对保留你的 OpenClash 设计)
+          # 1. 提取官方最新 AdGuardHome 放入安全备份库
           # ----------------------------------------------------
-          
-          # 1. 提取官方最新 AdGuardHome 
           echo "获取 AdGuardHome 最新稳定版..."
           AGH_API="https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest"
           AGH_URL=$(curl -s "$AGH_API" | grep "browser_download_url" | grep "linux_arm64.tar.gz" | head -n 1 | cut -d '"' -f 4)
@@ -232,13 +226,14 @@ jobs:
               tar -xzf /tmp/agh.tar.gz -C /tmp/agh_extract
               AGH_BIN=$(find /tmp/agh_extract -type f -name "AdGuardHome" | head -n 1)
               if [ -n "$AGH_BIN" ]; then
-                  # 💡 藏在 usr/bin/ 下并重命名，等开机脚本去挂载内存盘欺骗插件
-                  mv "$AGH_BIN" inject_tmp/usr/bin/AdGuardHome_core
-                  chmod 755 inject_tmp/usr/bin/AdGuardHome_core
+                  mv "$AGH_BIN" inject_tmp/usr/lib/core_backup/AdGuardHome_core
+                  chmod 755 inject_tmp/usr/lib/core_backup/AdGuardHome_core
               fi
           fi
 
-          # 2. 提取最新 Lucky 
+          # ----------------------------------------------------
+          # 2. 提取最新 Lucky 放入安全备份库
+          # ----------------------------------------------------
           echo "获取 Lucky 最新版..."
           if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
               LUCKY_PATTERN="Linux_arm64_wanji_docker.tar.gz"
@@ -253,12 +248,14 @@ jobs:
               tar -xzf /tmp/lucky.tar.gz -C /tmp/lucky_extract
               LUCKY_BIN=$(find /tmp/lucky_extract -type f -name "lucky" | head -n 1)
               if [ -n "$LUCKY_BIN" ]; then
-                  # 先放到临时文件夹，等会用 tar 暴力替换
-                  cp "$LUCKY_BIN" /tmp/lucky_core_new
+                  mv "$LUCKY_BIN" inject_tmp/usr/lib/core_backup/lucky
+                  chmod 755 inject_tmp/usr/lib/core_backup/lucky
               fi
           fi
 
+          # ----------------------------------------------------
           # 3. 提取 OpenClash Meta 内核 (绝不改动你的原版完美逻辑)
+          # ----------------------------------------------------
           echo "获取 OpenClash Meta 内核..."
           mkdir -p inject_tmp/etc/openclash/core
           wget -qO /tmp/clash_meta.tar.gz "https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz" || true
@@ -330,23 +327,10 @@ jobs:
               ln -sf /usr/sbin/openwrt-install-amlogic inject_tmp/root/install-to-emmc.sh
           fi
           
-          # 注入常规文件
+          # 💡 将 inject_tmp 内的全部文件打包覆盖进固件 (绝无冲突)
           cd inject_tmp
           sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
           cd ..
-          
-          # 💡 [暴击机制]：绕过 opkg 阻拦，强行物理剔除压缩包里的旧版 Lucky 并注入新版！
-          if [ -f /tmp/lucky_core_new ]; then
-              echo "暴力剔除旧版 Lucky 并注入新版..."
-              sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar usr/bin/lucky 2>/dev/null || true
-              sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar ./usr/bin/lucky 2>/dev/null || true
-              mkdir -p inject_lucky/usr/bin
-              mv /tmp/lucky_core_new inject_lucky/usr/bin/lucky
-              chmod 755 inject_lucky/usr/bin/lucky
-              cd inject_lucky
-              sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
-              cd ..
-          fi
           
           # 💡 [去重] 强行修复可能重复的 balethirq.pl 逻辑
           mkdir -p /tmp/rc_fix
