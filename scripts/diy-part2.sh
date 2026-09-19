@@ -22,6 +22,16 @@ clone_latest_tag() {
 mkdir -p package/custom
 
 # ==========================================
+# 0.5 锁定 Golang 版本，修复 Xray-core 编译报错
+# ==========================================
+echo "正在替换 Golang 源码为 27.x (Go 1.27) 稳定版本..."
+rm -rf feeds/packages/lang/golang
+# 💡 精准指定拉取 27.x 分支
+git clone -b 27.x --depth 1 https://github.com/sbwml/packages_lang_golang.git feeds/packages/lang/golang
+
+./scripts/feeds install -a -f
+
+# ==========================================
 # 1. 核心大分流：各源码隔离操作 (插件卸载与拉取)
 # ==========================================
 
@@ -193,7 +203,7 @@ mkdir -p ${FILES_DIR}/etc/init.d
 mkdir -p ${FILES_DIR}/etc/rc.d
 mkdir -p ${FILES_DIR}/usr/bin
 
-# 【智能挂载守护】：负责后期 eMMC 核心搬运
+# 【核心暗杀服务】：U盘不动如山，eMMC搬运后彻底自杀抹除痕迹
 cat << 'EOF' > ${FILES_DIR}/etc/init.d/n1_core_init
 #!/bin/sh /etc/rc.common
 START=99
@@ -253,7 +263,7 @@ net.bridge.bridge-nf-call-arptables=0
 SYSCTL_EOF
 sysctl -p
 
-# 3. 核心无痕替换 (首次启动强行覆盖包管理器版本)
+# 3. 核心无痕替换 (首次启动强行覆盖包管理器编译的旧版本)
 if [ -f /usr/bin/lucky_new ]; then
     mv /usr/bin/lucky_new /usr/bin/lucky
     chmod 755 /usr/bin/lucky
@@ -261,8 +271,8 @@ fi
 
 # 4. AdGuardHome 专属路径优化 (巧妙保证U盘能显示版本)
 mkdir -p /usr/bin/AdGuardHome
-# U盘启动时，软链接指向内部临时核心，界面不报错
-ln -s /usr/bin/AdGuardHome/AdGuardHome_core /usr/bin/AdGuardHome/AdGuardHome
+# U盘启动时，软链接指向内部临时核心，界面不报错能读出版本
+ln -sf /usr/bin/AdGuardHome/AdGuardHome_core /usr/bin/AdGuardHome/AdGuardHome
 uci set AdGuardHome.AdGuardHome.binpath='/usr/bin/AdGuardHome/AdGuardHome' 2>/dev/null
 uci set AdGuardHome.AdGuardHome.workdir='/usr/bin/AdGuardHome' 2>/dev/null
 uci commit AdGuardHome 2>/dev/null
@@ -272,7 +282,6 @@ rm -f /etc/uci-defaults/99_custom_setup
 EOF
 
 if [[ "$FIRMWARE_TYPE" == lede* ]]; then
-    # LEDE 特有
     cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/98_lede_setup
 #!/bin/sh
 uci delete uhttpd.main.listen_https 2>/dev/null
