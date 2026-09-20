@@ -164,10 +164,6 @@ jobs:
       - name: Download Package & Compile
         run: |
           cd openwrt
-          
-          echo "清理冗余 .git 历史以极限榨取硬盘空间..."
-          find ./feeds -type d -name ".git" -exec rm -rf {} + 2>/dev/null || true
-          
           make download -j8
           make -j$(nproc) || make -j1 || make -j1 V=s
 
