@@ -54,11 +54,11 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     rm -rf feeds/luci/applications/luci-app-passwall
 
     git clone https://github.com/sirpdboy/luci-app-adguardhome.git package/custom/luci-app-adguardhome
+    git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
     git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
-    clone_latest_tag "https://github.com/gdy666/luci-app-lucky" "lucky"
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
     clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
@@ -112,11 +112,11 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     rm -rf feeds/luci/applications/luci-app-passwall
 
     git clone https://github.com/sirpdboy/luci-app-adguardhome.git package/custom/luci-app-adguardhome
+    git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
     git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
-    clone_latest_tag "https://github.com/gdy666/luci-app-lucky" "lucky"
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
     clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
@@ -164,11 +164,11 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
 
     git clone https://github.com/sirpdboy/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/lisaac/luci-app-diskman package/custom/luci-app-diskman
+    git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
     git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
-    clone_latest_tag "https://github.com/gdy666/luci-app-lucky" "lucky"
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
     clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
