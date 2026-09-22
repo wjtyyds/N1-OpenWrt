@@ -361,6 +361,7 @@ jobs:
           
                           # 阅后即焚 (仅限 eMMC)
                           rm -rf /usr/lib/adg_core
+                          rm -rf /usr/bin/AdGuardHome_data
                       else
                           DATA_DIR="/usr/bin/AdGuardHome_data"
                           mkdir -p "$DATA_DIR"
