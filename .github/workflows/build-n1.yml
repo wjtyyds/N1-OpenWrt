@@ -105,6 +105,19 @@ jobs:
           elif [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
             git clone --depth 1 -b master https://github.com/coolsnowwolf/lede openwrt
           fi
+          
+          echo "开始精准锁定指定的 Tag/Branch: $TARGET_BRANCH"
+          mkdir openwrt && cd openwrt
+          git init
+          git remote add origin $REPO_URL
+          
+          # 核心：直接 fetch 远端该 tag 的最新指针，强行检出底层真实的 commit hash
+          git fetch --depth 1 origin "$TARGET_BRANCH"
+          git checkout FETCH_HEAD
+          
+          # 立即打印当前强锁的真实哈希，方便核对
+          CURRENT_HASH=$(git log -1 --format="%h")
+          echo "✅ 源码已成功锁定至最新提交哈希: $CURRENT_HASH"
 
       - name: Update & Install Feeds
         run: |
