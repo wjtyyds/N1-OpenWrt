@@ -22,15 +22,6 @@ clone_latest_tag() {
 mkdir -p package/custom
 
 # ==========================================
-# 0.5 锁定 Golang 版本，修复 Xray-core 编译报错
-# ==========================================
-echo "正在替换 Golang 源码为 27.x (Go 1.27) 稳定版本..."
-rm -rf feeds/packages/lang/golang
-git clone -b 27.x --depth 1 https://github.com/sbwml/packages_lang_golang.git feeds/packages/lang/golang
-
-./scripts/feeds install -a -f
-
-# ==========================================
 # 1. 核心大分流：各源码隔离操作 (插件卸载与拉取)
 # ==========================================
 
@@ -43,6 +34,7 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
         "oaf" "kmod-oaf" "appfilter" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
         "lucky" "luci-app-lucky"
         "passwall" "luci-app-passwall"
+        "luci-app-dockerman" "luci-lib-docker"
     )
     for plugin in "${lede_conflict_plugins[@]}"; do
         ./scripts/feeds uninstall "$plugin" || true
@@ -50,17 +42,14 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
         rm -rf feeds/luci/*/*/"$plugin"
     done
 
-    rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
-    rm -rf feeds/luci/applications/luci-app-passwall
-
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
+    git clone --depth 1 https://github.com/wjtyyds/luci-app-dockerman.git package/custom/luci-app-dockerman
+    git clone --depth 1 https://github.com/wjtyyds/luci-lib-docker.git package/custom/luci-lib-docker
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
-    git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
-    clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
@@ -81,13 +70,7 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
 elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     echo "====== 开始执行 ImmortalWrt 专属定制 ======"
 
-    # 💡 [选项1]：完整替换 Docker 引擎以适配 Go 1.27
-    echo "--- 正在完整替换 Docker 组件引擎以适配 Go 1.27 ---"
-    rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose}
-    git clone --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
-    cp -r /tmp/imm_packages/utils/{docker,dockerd,containerd,runc,docker-compose} feeds/packages/utils/ || true
-    rm -rf /tmp/imm_packages
-
+    # 特殊修复：immortalwrt 的 rust 依赖
     if [ "$SOURCE_BRANCH" == "v25.12.1" ]; then
         rm -rf feeds/packages/lang/rust
         git clone --depth 1 https://github.com/openwrt/packages.git /tmp/openwrt_packages
@@ -101,6 +84,7 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
         "oaf" "kmod-oaf" "appfilter" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
         "lucky" "luci-app-lucky"
         "passwall" "luci-app-passwall"
+        "luci-app-dockerman" "luci-lib-docker"
     )
     for plugin in "${immortalwrt_conflict_plugins[@]}"; do
         ./scripts/feeds uninstall "$plugin" || true
@@ -108,17 +92,14 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
         rm -rf feeds/luci/*/*/"$plugin"
     done
 
-    rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
-    rm -rf feeds/luci/applications/luci-app-passwall
-
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
+    git clone --depth 1 https://github.com/wjtyyds/luci-app-dockerman.git package/custom/luci-app-dockerman
+    git clone --depth 1 https://github.com/wjtyyds/luci-lib-docker.git package/custom/luci-lib-docker
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
-    git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
-    clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
@@ -152,6 +133,7 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
         "oaf" "kmod-oaf" "appfilter" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
         "lucky" "luci-app-lucky"
         "passwall" "luci-app-passwall"
+        "luci-app-dockerman" "luci-lib-docker"
     )
     for plugin in "${openwrt_conflict_plugins[@]}"; do
         ./scripts/feeds uninstall "$plugin" || true
@@ -159,18 +141,15 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
         rm -rf feeds/luci/*/*/"$plugin"
     done
 
-    rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
-    rm -rf feeds/luci/applications/luci-app-passwall
-
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/lisaac/luci-app-diskman package/custom/luci-app-diskman
+    git clone --depth 1 https://github.com/wjtyyds/luci-app-dockerman.git package/custom/luci-app-dockerman
+    git clone --depth 1 https://github.com/wjtyyds/luci-lib-docker.git package/custom/luci-lib-docker
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
-    git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
-    clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
