@@ -132,10 +132,17 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
 elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     echo "====== 开始执行 官方 OpenWrt 专属定制 ======"
 
-    # 💡 [选项1]：完整替换 Docker 引擎以适配 Go 1.27
-    echo "--- 正在完整替换 Docker 组件引擎以适配 Go 1.27 ---"
+    # 💡 [选项1]：完整替换 Docker 引擎以适配对应分支
+    # 自动截取大版本号，例如 v25.12.5 -> openwrt-25.12
+    if [[ "$SOURCE_BRANCH" =~ ^v([0-9]+\.[0-9]+) ]]; then
+        IMM_PKG_BRANCH="openwrt-${BASH_REMATCH[1]}"
+    else
+        IMM_PKG_BRANCH="master"
+    fi
+
+    echo "--- 正在从 immortalwrt/packages 的 $IMM_PKG_BRANCH 分支完整替换 Docker 组件引擎 ---"
     rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose}
-    git clone --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
+    git clone -b "$IMM_PKG_BRANCH" --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
     cp -r /tmp/imm_packages/utils/{docker,dockerd,containerd,runc,docker-compose} feeds/packages/utils/ || true
     rm -rf /tmp/imm_packages
 

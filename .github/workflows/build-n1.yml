@@ -516,5 +516,5 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.TAG_NAME }}
-          name: "🚀 Release ${{ env.TAG_NAME }}"
+          name: "${{ env.TAG_NAME }}"
           files: release_files/*
