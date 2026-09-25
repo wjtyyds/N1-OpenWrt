@@ -457,7 +457,8 @@ jobs:
           DATETIME=$(date +'%Y%m%d%H%M')
           
           for img in packit/output/*.img.gz; do
-            base_name="${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}-k${KERNEL_VERSION}-${DATETIME}"
+            # 💡 修改点 1：保留完整 DATETIME 和 KERNEL_VERSION，仅将中间的横杠替换为下划线 _
+            base_name="${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}-k${KERNEL_VERSION}_${DATETIME}"
             new_img_name="${base_name}.img.gz"
             cp "$img" "release_files/$new_img_name"
           done
@@ -490,23 +491,20 @@ jobs:
           BRANCH_NAME="${{ github.ref_name }}"
           
           if [ "$BRANCH_NAME" == "main" ] || [ "$BRANCH_NAME" == "master" ]; then
-          # 主分支上跑，采用当前现实时间
-          BUILD_DATE="v$(date +%y.%m.%d)"
+            BUILD_DATE="v$(date +%y.%m.%d)"
           else
-          # 定制分支上跑，提取分支名作为日期标签 (如分支名为 26.09.09)
-           if [[ "$BRANCH_NAME" != v* ]]; then
-           BUILD_DATE="v${BRANCH_NAME}"
-           else
-           BUILD_DATE="${BRANCH_NAME}"
-           fi
-           fi
+            if [[ "$BRANCH_NAME" != v* ]]; then
+              BUILD_DATE="v${BRANCH_NAME}"
+            else
+              BUILD_DATE="${BRANCH_NAME}"
+            fi
+          fi
           
-          # 根据构建类型决定是否添加后缀
+          # 💡 修改点 2：将 personal 的后缀改为小写的 -se
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
-          TAG_NAME="${BUILD_DATE}-personal"
+            TAG_NAME="${BUILD_DATE}-se"
           else
-          # public 版本直接使用日期/分支名，不加后缀
-          TAG_NAME="${BUILD_DATE}"
+            TAG_NAME="${BUILD_DATE}"
           fi
           
           echo "✅ 最终设定的 Release 标签为: $TAG_NAME"
