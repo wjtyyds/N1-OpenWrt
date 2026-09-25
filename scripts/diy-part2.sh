@@ -81,13 +81,6 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
 elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     echo "====== 开始执行 ImmortalWrt 专属定制 ======"
 
-    # 💡 [选项1]：完整替换 Docker 引擎以适配 Go 1.27
-    echo "--- 正在完整替换 Docker 组件引擎以适配 Go 1.27 ---"
-    rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose}
-    git clone --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
-    cp -r /tmp/imm_packages/utils/{docker,dockerd,containerd,runc,docker-compose} feeds/packages/utils/ || true
-    rm -rf /tmp/imm_packages
-
     if [ "$SOURCE_BRANCH" == "v25.12.1" ]; then
         rm -rf feeds/packages/lang/rust
         git clone --depth 1 https://github.com/openwrt/packages.git /tmp/openwrt_packages
