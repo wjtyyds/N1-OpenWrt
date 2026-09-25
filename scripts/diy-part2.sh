@@ -120,13 +120,6 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
 elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     echo "====== 开始执行 官方 OpenWrt 专属定制 ======"
 
-    # 💡 [选项1]：完整替换 Docker 引擎以适配 Go 1.27
-    echo "--- 正在完整替换 Docker 组件引擎以适配 Go 1.27 ---"
-    rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose}
-    git clone --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
-    cp -r /tmp/imm_packages/utils/{docker,dockerd,containerd,runc,docker-compose} feeds/packages/utils/ || true
-    rm -rf /tmp/imm_packages
-
     openwrt_conflict_plugins=(
         "adguardhome" "luci-app-adguardhome"
         "luci-app-openclash" "openclash"
