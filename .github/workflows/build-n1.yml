@@ -84,7 +84,7 @@ jobs:
           sudo apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
           
           echo "安装核心依赖..."
-          sudo apt-get -y install $(curl -fsSL https://ophub.org/ubuntu2204-make-openwrt-depends)
+          sudo apt-get -y install jq $(curl -fsSL https://ophub.org/ubuntu2204-make-openwrt-depends)
           
           echo "重载系统守护进程..."
           sudo systemctl daemon-reload
@@ -106,19 +106,38 @@ jobs:
             TARGET_BRANCH="${{ inputs.source_branch }}"
           elif [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
             REPO_URL="https://github.com/coolsnowwolf/lede"
-            TARGET_BRANCH="master"
+          
+            # 【核心逻辑】拦截 Rxx.xx.xx 并转换为 API 时间戳查询 Commit
+            if [[ "${{ inputs.source_branch }}" =~ ^R([0-9]{2})\.([0-9]{2})\.([0-9]{2})$ ]]; then
+              YEAR="20${BASH_REMATCH[1]}"
+              MONTH="${BASH_REMATCH[2]}"
+              DAY="${BASH_REMATCH[3]}"
+              TARGET_DATE="${YEAR}-${MONTH}-${DAY}T23:59:59Z"
+              echo "🔍 检测到 LEDE 专属日期版本: R${BASH_REMATCH[1]}.${MONTH}.${DAY}"
+              echo "⏳ 正在通过 GitHub API 检索该日期（${TARGET_DATE}）前的最新提交..."
+          
+              API_URL="https://api.github.com/repos/coolsnowwolf/lede/commits?until=$TARGET_DATE&per_page=1"
+              TARGET_BRANCH=$(curl -s "$API_URL" | jq -r '.[0].sha')
+          
+              if [ "$TARGET_BRANCH" == "null" ] || [ -z "$TARGET_BRANCH" ]; then
+                echo "⚠️ 获取哈希失败，回退拉取 master 分支"
+                TARGET_BRANCH="master"
+              else
+                echo "✅ 成功获取对应日期最新的哈希值: $TARGET_BRANCH"
+              fi
+            else
+              TARGET_BRANCH="${{ inputs.source_branch }}"
+            fi
           fi
           
-          echo "开始精准锁定指定的 Tag/Branch: $TARGET_BRANCH"
+          echo "开始精准锁定指定的 Tag/Branch/Hash: $TARGET_BRANCH"
           mkdir openwrt && cd openwrt
           git init
           git remote add origin $REPO_URL
           
-          # 核心：直接 fetch 远端该 tag 的最新指针，强行检出底层真实的 commit hash
           git fetch --depth 1 origin "$TARGET_BRANCH"
           git checkout FETCH_HEAD
           
-          # 立即打印当前强锁的真实哈希，方便核对
           CURRENT_HASH=$(git log -1 --format="%h")
           echo "✅ 源码已成功锁定至最新提交哈希: $CURRENT_HASH"
 
@@ -465,24 +484,30 @@ jobs:
             fi
           fi
           
-          FW_PREFIX="${{ inputs.firmware_type }}"
+          # ==========================================
+          # 【核心逻辑新增】动态识别分支名称作为 Release Tag
+          # ==========================================
+          BRANCH_NAME="${{ github.ref_name }}"
           
-          if [[ "$FW_PREFIX" == Lede* ]]; then
-            TAG_NAME="${FW_PREFIX}-${{ inputs.build_type }}"
+          if [ "$BRANCH_NAME" == "main" ] || [ "$BRANCH_NAME" == "master" ]; then
+            # 主分支上跑，采用当前现实时间
+            BUILD_DATE="v$(date +%y.%m.%d)"
           else
-            if [[ "$OPENWRT_VER" == *.* ]]; then
-              BASE_VER="${OPENWRT_VER%.*}.x"
+            # 定制分支上跑，提取分支名作为日期标签 (如分支名为 26.09.09)
+            if [[ "$BRANCH_NAME" != v* ]]; then
+              BUILD_DATE="v${BRANCH_NAME}"
             else
-              BASE_VER="$OPENWRT_VER"
+              BUILD_DATE="${BRANCH_NAME}"
             fi
-            TAG_NAME="${FW_PREFIX}-${BASE_VER}-${{ inputs.build_type }}"
           fi
           
+          TAG_NAME="${BUILD_DATE}-${{ env.BUILD_LOWER }}"
+          echo "✅ 最终设定的 Release 标签为: $TAG_NAME"
           echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.TAG_NAME }}
-          name: "🚀 ${{ env.TAG_NAME }}"
+          name: "🚀 Release ${{ env.TAG_NAME }}"
           files: release_files/*
