@@ -176,8 +176,8 @@ fi
 FILES_DIR="package/base-files/files"
 mkdir -p ${FILES_DIR}/etc/uci-defaults
 
-# --- 基础配置优化脚本 ---
-cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/99_custom_setup
+# 💡 命名为 zz_custom_setup 保证全系统最后一个执行，绝对秒杀 LEDE 祖传跑分
+cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
 #!/bin/sh
 
 # 1. OAF 模块加载
@@ -206,8 +206,12 @@ uci set AdGuardHome.AdGuardHome.binpath='/usr/bin/AdGuardHome/AdGuardHome' 2>/de
 uci set AdGuardHome.AdGuardHome.workdir='/usr/bin/AdGuardHome' 2>/dev/null
 uci commit AdGuardHome 2>/dev/null
 
+# 4. 彻底清理 LEDE 祖传的跑分计划任务 (全网最稳的末位清理法)
+sed -i '/coremark/d' /etc/crontabs/root 2>/dev/null
+/etc/init.d/cron restart 2>/dev/null
+
 # 脚本使命完成，自毁
-rm -f /etc/uci-defaults/99_custom_setup
+rm -f /etc/uci-defaults/zz_custom_setup
 EOF
 
 if [[ "$FIRMWARE_TYPE" == lede* ]]; then

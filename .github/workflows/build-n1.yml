@@ -491,20 +491,20 @@ jobs:
           BRANCH_NAME="${{ github.ref_name }}"
           
           if [ "$BRANCH_NAME" == "main" ] || [ "$BRANCH_NAME" == "master" ]; then
-            BUILD_DATE="v$(date +%y.%m.%d)"
+          BUILD_DATE="v$(date +%y.%m.%d)"
           else
-            if [[ "$BRANCH_NAME" != v* ]]; then
-              BUILD_DATE="v${BRANCH_NAME}"
-            else
-              BUILD_DATE="${BRANCH_NAME}"
-            fi
+          if [[ "$BRANCH_NAME" != v* ]]; then
+          BUILD_DATE="v${BRANCH_NAME}"
+          else
+          BUILD_DATE="${BRANCH_NAME}"
+          fi
           fi
           
-          # 💡 修改点 2：将 personal 的后缀改为小写的 -se
+          # 💡 将 personal 的发布固定收集到单一的 'Personal' 页面
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
-            TAG_NAME="${BUILD_DATE}-se"
+          TAG_NAME="Personal"
           else
-            TAG_NAME="${BUILD_DATE}"
+          TAG_NAME="${BUILD_DATE}"
           fi
           
           echo "✅ 最终设定的 Release 标签为: $TAG_NAME"
