@@ -61,13 +61,12 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
 
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
-    # 💡 严格锁定 Passwall 为 16 版本的 tag
-    git clone -b 26.9.16-1 --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall package/custom/passwall-luci
     git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
+    clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
@@ -114,13 +113,12 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
 
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
-    # 💡 严格锁定 Passwall 为 16 版本的 tag
-    git clone -b 26.9.16-1 --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall package/custom/passwall-luci
     git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
+    clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
@@ -174,13 +172,12 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/lisaac/luci-app-diskman package/custom/luci-app-diskman
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
-    # 💡 严格锁定 Passwall 为 16 版本的 tag
-    git clone -b 26.9.16-1 --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall package/custom/passwall-luci
     git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
+    clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
