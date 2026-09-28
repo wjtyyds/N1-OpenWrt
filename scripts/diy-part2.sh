@@ -22,6 +22,15 @@ clone_latest_tag() {
 mkdir -p package/custom
 
 # ==========================================
+# 0.5 锁定 Golang 版本，修复 Xray-core 编译报错
+# ==========================================
+echo "正在替换 Golang 源码为 27.x (Go 1.27) 稳定版本..."
+rm -rf feeds/packages/lang/golang
+git clone -b 27.x --depth 1 https://github.com/sbwml/packages_lang_golang.git feeds/packages/lang/golang
+
+./scripts/feeds install -a -f
+
+# ==========================================
 # 1. 核心大分流：各源码隔离操作 (插件卸载与拉取)
 # ==========================================
 
@@ -34,18 +43,27 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
         "oaf" "kmod-oaf" "appfilter" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
         "lucky" "luci-app-lucky"
         "passwall" "luci-app-passwall"
-        "luci-app-dockerman" "luci-lib-docker"
+        # 把 hysteria 等核心组件加进来，让系统彻底 uninstall 解除软链接
+        "hysteria" "sing-box" "xray-core" "xray-plugin" "v2ray-geodata" "v2ray-plugin" "shadowsocks-rust" "shadowsocksr-libev"
     )
     for plugin in "${lede_conflict_plugins[@]}"; do
         ./scripts/feeds uninstall "$plugin" || true
         rm -rf feeds/packages/*/*/"$plugin"
         rm -rf feeds/luci/*/*/"$plugin"
+        # 循环中一并斩断 helloworld 下的同名包
+        rm -rf feeds/helloworld/"$plugin" 2>/dev/null
     done
 
+    rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
+    # 把 helloworld 库里的老底彻底抄掉
+    rm -rf feeds/helloworld/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls} 2>/dev/null
+    rm -rf feeds/luci/applications/luci-app-passwall
+
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
-    git clone --depth 1 https://github.com/wjtyyds/luci-app-dockerman.git package/custom/luci-app-dockerman
-    git clone --depth 1 https://github.com/wjtyyds/luci-lib-docker.git package/custom/luci-lib-docker
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
+    # 💡 严格锁定 Passwall 为 16 版本的 tag
+    git clone -b 26.9.16-1 --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall package/custom/passwall-luci
+    git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
@@ -70,7 +88,6 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
 elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     echo "====== 开始执行 ImmortalWrt 专属定制 ======"
 
-    # 特殊修复：immortalwrt 的 rust 依赖
     if [ "$SOURCE_BRANCH" == "v25.12.1" ]; then
         rm -rf feeds/packages/lang/rust
         git clone --depth 1 https://github.com/openwrt/packages.git /tmp/openwrt_packages
@@ -84,7 +101,7 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
         "oaf" "kmod-oaf" "appfilter" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
         "lucky" "luci-app-lucky"
         "passwall" "luci-app-passwall"
-        "luci-app-dockerman" "luci-lib-docker"
+        "hysteria" "sing-box" "xray-core" "xray-plugin" "v2ray-geodata" "v2ray-plugin" "shadowsocks-rust" "shadowsocksr-libev"
     )
     for plugin in "${immortalwrt_conflict_plugins[@]}"; do
         ./scripts/feeds uninstall "$plugin" || true
@@ -92,10 +109,14 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
         rm -rf feeds/luci/*/*/"$plugin"
     done
 
+    rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
+    rm -rf feeds/luci/applications/luci-app-passwall
+
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
-    git clone --depth 1 https://github.com/wjtyyds/luci-app-dockerman.git package/custom/luci-app-dockerman
-    git clone --depth 1 https://github.com/wjtyyds/luci-lib-docker.git package/custom/luci-lib-docker
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
+    # 💡 严格锁定 Passwall 为 16 版本的 tag
+    git clone -b 26.9.16-1 --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall package/custom/passwall-luci
+    git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
@@ -120,13 +141,26 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
 elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     echo "====== 开始执行 官方 OpenWrt 专属定制 ======"
 
+    # 💡 [选项1]：完整替换 Docker 引擎以适配对应分支
+    if [[ "$SOURCE_BRANCH" =~ ^v([0-9]+\.[0-9]+) ]]; then
+        IMM_PKG_BRANCH="openwrt-${BASH_REMATCH[1]}"
+    else
+        IMM_PKG_BRANCH="master"
+    fi
+
+    echo "--- 正在从 immortalwrt/packages 的 $IMM_PKG_BRANCH 分支完整替换 Docker 组件引擎 ---"
+    rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose}
+    git clone -b "$IMM_PKG_BRANCH" --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
+    cp -r /tmp/imm_packages/utils/{docker,dockerd,containerd,runc,docker-compose} feeds/packages/utils/ || true
+    rm -rf /tmp/imm_packages
+
     openwrt_conflict_plugins=(
         "adguardhome" "luci-app-adguardhome"
         "luci-app-openclash" "openclash"
         "oaf" "kmod-oaf" "appfilter" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
         "lucky" "luci-app-lucky"
         "passwall" "luci-app-passwall"
-        "luci-app-dockerman" "luci-lib-docker"
+        "hysteria" "sing-box" "xray-core" "xray-plugin" "v2ray-geodata" "v2ray-plugin" "shadowsocks-rust" "shadowsocksr-libev"
     )
     for plugin in "${openwrt_conflict_plugins[@]}"; do
         ./scripts/feeds uninstall "$plugin" || true
@@ -134,11 +168,15 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
         rm -rf feeds/luci/*/*/"$plugin"
     done
 
+    rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
+    rm -rf feeds/luci/applications/luci-app-passwall
+
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/lisaac/luci-app-diskman package/custom/luci-app-diskman
-    git clone --depth 1 https://github.com/wjtyyds/luci-app-dockerman.git package/custom/luci-app-dockerman
-    git clone --depth 1 https://github.com/wjtyyds/luci-lib-docker.git package/custom/luci-lib-docker
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
+    # 💡 严格锁定 Passwall 为 16 版本的 tag
+    git clone -b 26.9.16-1 --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall package/custom/passwall-luci
+    git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
@@ -167,7 +205,7 @@ fi
 if [ "$BUILD_TYPE" == "public" ]; then
     echo "【公共版】：使用源码集成的 Docker 与 Dockerman 组件..."
 else
-    echo "【私有版】：无需 Docker，跳过相关组件拉取..."
+    echo "【私这版】：无需 Docker，跳过相关组件拉取..."
 fi
 
 # ==========================================
@@ -176,7 +214,7 @@ fi
 FILES_DIR="package/base-files/files"
 mkdir -p ${FILES_DIR}/etc/uci-defaults
 
-# 💡 命名为 zz_custom_setup 保证全系统最后一个执行，绝对秒杀 LEDE 祖传跑分
+# 💡 命名为 zz_custom_setup 保证全系统最后一个执行，绝对秒杀 LEDE 祖传跑分 (传承 09 基底的防爆设计)
 cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
 #!/bin/sh
 
