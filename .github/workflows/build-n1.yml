@@ -97,6 +97,8 @@ jobs:
           echo "✅ 环境安装完毕！"
 
       - name: Clone Source Code
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_TOKEN }}
         run: |
           if [ "${{ env.FIRMWARE_LOWER }}" == "openwrt" ]; then
             REPO_URL="https://github.com/openwrt/openwrt"
@@ -117,10 +119,13 @@ jobs:
               echo "⏳ 正在通过 GitHub API 检索该日期（${TARGET_DATE}）前的最新提交..."
           
               API_URL="https://api.github.com/repos/coolsnowwolf/lede/commits?until=$TARGET_DATE&per_page=1"
-              TARGET_BRANCH=$(curl -s "$API_URL" | jq -r '.[0].sha')
+              API_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$API_URL")
+              TARGET_BRANCH=$(echo "$API_RESP" | jq -r '.[0].sha' 2>/dev/null)
           
               if [ "$TARGET_BRANCH" == "null" ] || [ -z "$TARGET_BRANCH" ]; then
-                echo "⚠️ 获取哈希失败，回退拉取 master 分支"
+                echo "❌ 获取 LEDE 哈希失败！API 响应详情："
+                echo "$API_RESP" | head -n 15
+                echo "⚠️ 回退拉取 master 分支"
                 TARGET_BRANCH="master"
               else
                 echo "✅ 成功获取对应日期最新的哈希值: $TARGET_BRANCH"
@@ -154,6 +159,7 @@ jobs:
           SOURCE_BRANCH: ${{ inputs.source_branch }}
           PPPOE_USER: ${{ secrets.PPPOE_USER }}
           PPPOE_PASS: ${{ secrets.PPPOE_PASS }}
+          GH_TOKEN: ${{ secrets.PRIVATE_TOKEN }}
         run: |
           cd openwrt
           chmod +x $GITHUB_WORKSPACE/scripts/diy-part2.sh
@@ -252,8 +258,10 @@ jobs:
           # ----------------------------------------------------
           echo "获取 AdGuardHome 最新稳定版..."
           AGH_API="https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest"
-          AGH_URL=$(curl -s "$AGH_API" | grep "browser_download_url" | grep "linux_arm64.tar.gz" | head -n 1 | cut -d '"' -f 4)
+          AGH_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$AGH_API")
+          AGH_URL=$(echo "$AGH_RESP" | grep "browser_download_url" | grep "linux_arm64.tar.gz" | head -n 1 | cut -d '"' -f 4)
           if [ -n "$AGH_URL" ]; then
+              echo "✅ 成功解析到 AdGuardHome 地址: $AGH_URL"
               wget -qO /tmp/agh.tar.gz "$AGH_URL"
               mkdir -p /tmp/agh_extract
               tar -xzf /tmp/agh.tar.gz -C /tmp/agh_extract
@@ -262,6 +270,9 @@ jobs:
                   mv "$AGH_BIN" inject_tmp/usr/lib/adg_core/AdGuardHome
                   chmod 755 inject_tmp/usr/lib/adg_core/AdGuardHome
               fi
+          else
+              echo "❌ 解析 AdGuardHome 下载链接失败！API 返回内容如下："
+              echo "$AGH_RESP" | head -n 15
           fi
           
           # ----------------------------------------------------
@@ -309,7 +320,16 @@ jobs:
           fi
           
           # 4. 处理 OAF 模块
-          OAF_UI_VER=$(curl -s "https://api.github.com/repos/destan19/OpenAppFilter/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "获取 OpenAppFilter 最新版本..."
+          OAF_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/destan19/OpenAppFilter/releases/latest")
+          OAF_UI_VER=$(echo "$OAF_RESP" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -z "$OAF_UI_VER" ]; then
+              echo "❌ 获取 OAF 版本失败！API 返回内容如下："
+              echo "$OAF_RESP" | head -n 15
+          else
+              echo "✅ 获取到 OAF 最新版本: $OAF_UI_VER"
+          fi
+
           if [[ "$OAF_UI_VER" == v7* ]]; then
               OAF_KMOD_TAG="OAF_Kmods_v7.0.1"
           else

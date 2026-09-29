@@ -2,19 +2,24 @@
 # diy-part2.sh
 
 # ==========================================
-# 0. 获取最新 Tag 克隆函数
+# 0. 获取最新 Tag 克隆函数 (已强化鉴权与日志)
 # ==========================================
 clone_latest_tag() {
     local repo_url=$1
     local dest_dir=$2
     local api_url="https://api.github.com/repos/${repo_url#https://github.com/}/releases/latest"
-    local latest_tag=$(curl -s "$api_url" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+
+    echo "查询 $dest_dir 最新 Tag..."
+    local api_resp=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$api_url")
+    local latest_tag=$(echo "$api_resp" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
     if [ -n "$latest_tag" ]; then
-        echo "发现最新 Tag: $latest_tag，正在克隆..."
+        echo "✅ 成功解析到 $dest_dir 最新 Tag: $latest_tag，正在克隆..."
         git clone --branch "$latest_tag" --depth 1 "$repo_url" "package/custom/$dest_dir"
     else
-        echo "未发现 Release Tag，拉取默认分支最新代码..."
+        echo "❌ 未能从 API 解析到 $dest_dir 的 Tag！API 响应详情："
+        echo "$api_resp" | head -n 15
+        echo "⚠️ 强制回退，正在拉取默认分支最新代码..."
         git clone --depth 1 "$repo_url" "package/custom/$dest_dir"
     fi
 }
@@ -69,15 +74,20 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
-    OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    echo "正在获取 OpenClash 最新版本..."
+    OPENCLASH_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/vernesong/OpenClash/releases/latest")
+    OPENCLASH_TAG=$(echo "$OPENCLASH_RESP" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     mkdir -p /tmp/OpenClash && cd /tmp/OpenClash
     git init
     git remote add origin "$OPENCLASH_REPO"
     git config core.sparseCheckout true
     echo "luci-app-openclash/*" >> .git/info/sparse-checkout
     if [ -n "$OPENCLASH_TAG" ]; then
+        echo "✅ 成功获取 OpenClash Tag: $OPENCLASH_TAG"
         git pull --depth 1 origin "$OPENCLASH_TAG"
     else
+        echo "❌ 获取 OpenClash Tag 失败！API响应前15行："
+        echo "$OPENCLASH_RESP" | head -n 15
         git pull --depth 1 origin master
     fi
     mv luci-app-openclash $GITHUB_WORKSPACE/openwrt/package/custom/
@@ -121,15 +131,20 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
-    OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    echo "正在获取 OpenClash 最新版本..."
+    OPENCLASH_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/vernesong/OpenClash/releases/latest")
+    OPENCLASH_TAG=$(echo "$OPENCLASH_RESP" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     mkdir -p /tmp/OpenClash && cd /tmp/OpenClash
     git init
     git remote add origin "$OPENCLASH_REPO"
     git config core.sparseCheckout true
     echo "luci-app-openclash/*" >> .git/info/sparse-checkout
     if [ -n "$OPENCLASH_TAG" ]; then
+        echo "✅ 成功获取 OpenClash Tag: $OPENCLASH_TAG"
         git pull --depth 1 origin "$OPENCLASH_TAG"
     else
+        echo "❌ 获取 OpenClash Tag 失败！API响应前15行："
+        echo "$OPENCLASH_RESP" | head -n 15
         git pull --depth 1 origin master
     fi
     mv luci-app-openclash $GITHUB_WORKSPACE/openwrt/package/custom/
@@ -180,15 +195,20 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
-    OPENCLASH_TAG=$(curl -s "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    echo "正在获取 OpenClash 最新版本..."
+    OPENCLASH_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/vernesong/OpenClash/releases/latest")
+    OPENCLASH_TAG=$(echo "$OPENCLASH_RESP" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     mkdir -p /tmp/OpenClash && cd /tmp/OpenClash
     git init
     git remote add origin "$OPENCLASH_REPO"
     git config core.sparseCheckout true
     echo "luci-app-openclash/*" >> .git/info/sparse-checkout
     if [ -n "$OPENCLASH_TAG" ]; then
+        echo "✅ 成功获取 OpenClash Tag: $OPENCLASH_TAG"
         git pull --depth 1 origin "$OPENCLASH_TAG"
     else
+        echo "❌ 获取 OpenClash Tag 失败！API响应前15行："
+        echo "$OPENCLASH_RESP" | head -n 15
         git pull --depth 1 origin master
     fi
     mv luci-app-openclash $GITHUB_WORKSPACE/openwrt/package/custom/
@@ -202,7 +222,7 @@ fi
 if [ "$BUILD_TYPE" == "public" ]; then
     echo "【公共版】：使用源码集成的 Docker 与 Dockerman 组件..."
 else
-    echo "【私这版】：无需 Docker，跳过相关组件拉取..."
+    echo "【私有版】：无需 Docker，跳过相关组件拉取..."
 fi
 
 # ==========================================
