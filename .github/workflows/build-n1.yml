@@ -511,7 +511,7 @@ jobs:
           BRANCH_NAME="${{ github.ref_name }}"
           
           if [ "$BRANCH_NAME" == "main" ] || [ "$BRANCH_NAME" == "master" ]; then
-          BUILD_DATE="v$(date +%y.%m.%d)"
+          BUILD_DATE="v$(date +%Y.%m.%d)"
           else
           if [[ "$BRANCH_NAME" != v* ]]; then
           BUILD_DATE="v${BRANCH_NAME}"
