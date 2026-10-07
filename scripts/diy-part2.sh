@@ -43,8 +43,6 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     done
 
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
-    git clone --depth 1 https://github.com/wjtyyds/luci-app-dockerman.git package/custom/luci-app-dockerman
-    git clone --depth 1 https://github.com/wjtyyds/luci-lib-docker.git package/custom/luci-lib-docker
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
@@ -93,8 +91,6 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     done
 
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
-    git clone --depth 1 https://github.com/wjtyyds/luci-app-dockerman.git package/custom/luci-app-dockerman
-    git clone --depth 1 https://github.com/wjtyyds/luci-lib-docker.git package/custom/luci-lib-docker
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
@@ -136,8 +132,6 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
 
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/lisaac/luci-app-diskman package/custom/luci-app-diskman
-    git clone --depth 1 https://github.com/wjtyyds/luci-app-dockerman.git package/custom/luci-app-dockerman
-    git clone --depth 1 https://github.com/wjtyyds/luci-lib-docker.git package/custom/luci-lib-docker
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
