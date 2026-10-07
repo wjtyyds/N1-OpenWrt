@@ -77,6 +77,10 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     cd $GITHUB_WORKSPACE/openwrt
     rm -rf /tmp/OpenClash
 
+    # 修复 LEDE 源码下 Aurora 主题页脚空括号问题
+    echo "修复 LEDE Aurora 主题页脚空括号..."
+    find package/custom/luci-theme-aurora -name "footer.ut" -exec sed -i 's/({{ version.distrevision }})/{% if (version.distrevision): %} ({{ version.distrevision }}){% endif %}/g' {} +
+
 elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     echo "====== 开始执行 ImmortalWrt 专属定制 ======"
 
