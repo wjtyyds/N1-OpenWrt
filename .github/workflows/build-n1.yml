@@ -171,6 +171,39 @@ jobs:
           sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=512/g' openwrt/.config
           grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=512" >> openwrt/.config
           
+          if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
+            echo "====== 开始注入 Personal 版本专属强效断根指令 ======"
+            # 1. 彻底封杀 Docker 家族
+            echo "# CONFIG_PACKAGE_docker is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_dockerd is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_docker-compose is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_containerd is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_runc is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_luci-app-dockerman is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_luci-lib-docker is not set" >> openwrt/.config
+          
+            # 2. 彻底封杀 Passwall / SSR+ 及一切底层代理组件
+            echo "# CONFIG_PACKAGE_luci-app-passwall is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_luci-app-ssr-plus is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_xray-core is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_sing-box is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_shadowsocksr-libev-ssr-local is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_shadowsocksr-libev-ssr-redir is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_v2ray-plugin is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_v2ray-geoip is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_v2ray-geosite is not set" >> openwrt/.config
+          
+            # 3. 封杀附属小工具
+            echo "# CONFIG_PACKAGE_chinadns-ng is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_dns2socks is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_ipt2socks is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_microsocks is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_tcping is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_geoview is not set" >> openwrt/.config
+            echo "# CONFIG_PACKAGE_simple-obfs-client is not set" >> openwrt/.config
+          fi
+          
           cd openwrt
           make defconfig
 
@@ -478,9 +511,9 @@ jobs:
           fi
           fi
           
-          # 💡 将 personal 的发布固定收集到单一的 'Personal' 页面
+          # 💡 将 personal 的发布固定收集到单一的 'personal' 页面
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
-          TAG_NAME="Personal"
+          TAG_NAME="personal"
           else
           TAG_NAME="${BUILD_DATE}"
           fi

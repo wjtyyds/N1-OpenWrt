@@ -35,12 +35,24 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
         "lucky" "luci-app-lucky"
         "passwall" "luci-app-passwall"
         "luci-app-dockerman" "luci-lib-docker"
+        "hysteria" "sing-box" "xray-core" "xray-plugin" "v2ray-geodata" "v2ray-plugin" "shadowsocks-rust" "shadowsocksr-libev"
     )
     for plugin in "${lede_conflict_plugins[@]}"; do
         ./scripts/feeds uninstall "$plugin" || true
         rm -rf feeds/packages/*/*/"$plugin"
         rm -rf feeds/luci/*/*/"$plugin"
+        rm -rf feeds/helloworld/"$plugin" 2>/dev/null
     done
+
+    if [ "$BUILD_TYPE" == "personal" ]; then
+        echo "【Personal 版本】：执行终极物理阉割，抹除 Docker 与 代理组件..."
+        # 斩草除根 Docker
+        rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose} 2>/dev/null
+        rm -rf feeds/luci/applications/luci-app-dockerman 2>/dev/null
+        # 挫骨扬灰 代理源
+        rm -rf feeds/helloworld 2>/dev/null
+        rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls} 2>/dev/null
+    fi
 
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
@@ -83,12 +95,24 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
         "lucky" "luci-app-lucky"
         "passwall" "luci-app-passwall"
         "luci-app-dockerman" "luci-lib-docker"
+        "hysteria" "sing-box" "xray-core" "xray-plugin" "v2ray-geodata" "v2ray-plugin" "shadowsocks-rust" "shadowsocksr-libev"
     )
     for plugin in "${immortalwrt_conflict_plugins[@]}"; do
         ./scripts/feeds uninstall "$plugin" || true
         rm -rf feeds/packages/*/*/"$plugin"
         rm -rf feeds/luci/*/*/"$plugin"
+        rm -rf feeds/helloworld/"$plugin" 2>/dev/null
     done
+
+    if [ "$BUILD_TYPE" == "personal" ]; then
+        echo "【Personal 版本】：执行终极物理阉割，抹除 Docker 与 代理组件..."
+        # 斩草除根 Docker
+        rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose} 2>/dev/null
+        rm -rf feeds/luci/applications/luci-app-dockerman 2>/dev/null
+        # 挫骨扬灰 代理源
+        rm -rf feeds/helloworld 2>/dev/null
+        rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls} 2>/dev/null
+    fi
 
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
@@ -123,12 +147,24 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
         "lucky" "luci-app-lucky"
         "passwall" "luci-app-passwall"
         "luci-app-dockerman" "luci-lib-docker"
+        "hysteria" "sing-box" "xray-core" "xray-plugin" "v2ray-geodata" "v2ray-plugin" "shadowsocks-rust" "shadowsocksr-libev"
     )
     for plugin in "${openwrt_conflict_plugins[@]}"; do
         ./scripts/feeds uninstall "$plugin" || true
         rm -rf feeds/packages/*/*/"$plugin"
         rm -rf feeds/luci/*/*/"$plugin"
+        rm -rf feeds/helloworld/"$plugin" 2>/dev/null
     done
+
+    if [ "$BUILD_TYPE" == "personal" ]; then
+        echo "【Personal 版本】：执行终极物理阉割，抹除 Docker 与 代理组件..."
+        # 斩草除根 Docker
+        rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose} 2>/dev/null
+        rm -rf feeds/luci/applications/luci-app-dockerman 2>/dev/null
+        # 挫骨扬灰 代理源
+        rm -rf feeds/helloworld 2>/dev/null
+        rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls} 2>/dev/null
+    fi
 
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/lisaac/luci-app-diskman package/custom/luci-app-diskman
