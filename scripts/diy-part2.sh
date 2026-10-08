@@ -27,6 +27,16 @@ clone_latest_tag() {
 mkdir -p package/custom
 
 # ==========================================
+# 0.5. 提取公共逻辑：Golang 升级
+# ==========================================
+if [[ "$FIRMWARE_TYPE" != lede* ]] && [ "$BUILD_TYPE" != "personal" ]; then
+    echo "【Public 编译专属】：为 OpenWrt 和 ImmortalWrt 升级 Golang 1.27..."
+    rm -rf feeds/packages/lang/golang
+    git clone -b 27.x --depth 1 https://github.com/sbwml/packages_lang_golang.git feeds/packages/lang/golang
+    ./scripts/feeds install -a -f
+fi
+
+# ==========================================
 # 1. 核心大分流：各源码隔离操作 (插件卸载与拉取)
 # ==========================================
 
@@ -165,10 +175,7 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     echo "====== 开始执行 官方 OpenWrt 专属定制 ======"
 
     if [ "$BUILD_TYPE" != "personal" ]; then
-        echo "【Public 版本专属】：更新 Golang 源码并替换高版本 Docker 引擎..."
-        rm -rf feeds/packages/lang/golang
-        git clone -b 27.x --depth 1 https://github.com/sbwml/packages_lang_golang.git feeds/packages/lang/golang
-
+        echo "【Public 版本专属】：替换高版本 Docker 引擎..."
         if [[ "$SOURCE_BRANCH" =~ ^v([0-9]+\.[0-9]+) ]]; then
             IMM_PKG_BRANCH="openwrt-${BASH_REMATCH[1]}"
         else
@@ -179,9 +186,6 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
         git clone -b "$IMM_PKG_BRANCH" --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
         cp -r /tmp/imm_packages/utils/{docker,dockerd,containerd,runc,docker-compose} feeds/packages/utils/ || true
         rm -rf /tmp/imm_packages
-
-        # 由于更新了 Go，重新安装 feeds 以生效
-        ./scripts/feeds install -a -f
     fi
 
     openwrt_conflict_plugins=(
