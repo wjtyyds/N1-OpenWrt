@@ -182,21 +182,45 @@ jobs:
           sed -i 's/CONFIG_PACKAGE_shadowsocks-rust-sslocal=y/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/g' openwrt/.config
           
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
-              # 💡 明确禁止 Docker 及其所有底层组件的编译 (防死灰复燃)
-              sed -i 's/CONFIG_PACKAGE_luci-app-dockerman=y/# CONFIG_PACKAGE_luci-app-dockerman is not set/g' openwrt/.config
-              sed -i 's/CONFIG_PACKAGE_luci-lib-docker=y/# CONFIG_PACKAGE_luci-lib-docker is not set/g' openwrt/.config
-              sed -i 's/CONFIG_PACKAGE_docker=y/# CONFIG_PACKAGE_docker is not set/g' openwrt/.config
-              sed -i 's/CONFIG_PACKAGE_docker-compose=y/# CONFIG_PACKAGE_docker-compose is not set/g' openwrt/.config
-              sed -i 's/CONFIG_PACKAGE_dockerd=y/# CONFIG_PACKAGE_dockerd is not set/g' openwrt/.config
-              sed -i 's/CONFIG_PACKAGE_containerd=y/# CONFIG_PACKAGE_containerd is not set/g' openwrt/.config
-              sed -i 's/CONFIG_PACKAGE_runc=y/# CONFIG_PACKAGE_runc is not set/g' openwrt/.config
-              sed -i 's/CONFIG_DOCKER_NET_MACVLAN=y/# CONFIG_DOCKER_NET_MACVLAN is not set/g' openwrt/.config
-              sed -i 's/CONFIG_DOCKER_STO_EXT4=y/# CONFIG_DOCKER_STO_EXT4 is not set/g' openwrt/.config
-          
-              # 剔除 Passwall 及其关联配置
-              sed -i 's/CONFIG_PACKAGE_luci-app-passwall=y/# CONFIG_PACKAGE_luci-app-passwall is not set/g' openwrt/.config
-              sed -i '/CONFIG_PACKAGE_luci-app-passwall_/d' openwrt/.config
-              sed -i 's/CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y/# CONFIG_PACKAGE_luci-i18n-passwall-zh-cn is not set/g' openwrt/.config
+            echo "====== 开始注入 Personal 版本专属强效断根指令 ======"
+        
+            # 1. 明确禁止 Docker 及其所有底层组件的编译 (防死灰复燃)
+            sed -i 's/CONFIG_PACKAGE_luci-app-dockerman=y/# CONFIG_PACKAGE_luci-app-dockerman is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_luci-lib-docker=y/# CONFIG_PACKAGE_luci-lib-docker is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_docker=y/# CONFIG_PACKAGE_docker is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_docker-compose=y/# CONFIG_PACKAGE_docker-compose is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_dockerd=y/# CONFIG_PACKAGE_dockerd is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_containerd=y/# CONFIG_PACKAGE_containerd is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_runc=y/# CONFIG_PACKAGE_runc is not set/g' openwrt/.config
+            sed -i 's/CONFIG_DOCKER_NET_MACVLAN=y/# CONFIG_DOCKER_NET_MACVLAN is not set/g' openwrt/.config
+            sed -i 's/CONFIG_DOCKER_STO_EXT4=y/# CONFIG_DOCKER_STO_EXT4 is not set/g' openwrt/.config
+        
+            # 2. 彻底封杀 Passwall / SSR+ 及一切底层代理组件
+            sed -i 's/CONFIG_PACKAGE_luci-app-passwall=y/# CONFIG_PACKAGE_luci-app-passwall is not set/g' openwrt/.config
+            sed -i '/CONFIG_PACKAGE_luci-app-passwall_/d' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y/# CONFIG_PACKAGE_luci-i18n-passwall-zh-cn is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus=y/# CONFIG_PACKAGE_luci-app-ssr-plus is not set/g' openwrt/.config
+            sed -i '/CONFIG_PACKAGE_luci-app-ssr-plus_/d' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_xray-core=y/# CONFIG_PACKAGE_xray-core is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_sing-box=y/# CONFIG_PACKAGE_sing-box is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_shadowsocksr-libev-ssr-local=y/# CONFIG_PACKAGE_shadowsocksr-libev-ssr-local is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_shadowsocksr-libev-ssr-redir=y/# CONFIG_PACKAGE_shadowsocksr-libev-ssr-redir is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_v2ray-plugin=y/# CONFIG_PACKAGE_v2ray-plugin is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_v2ray-geoip=y/# CONFIG_PACKAGE_v2ray-geoip is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_v2ray-geosite=y/# CONFIG_PACKAGE_v2ray-geosite is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_shadowsocks-rust=y/# CONFIG_PACKAGE_shadowsocks-rust is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Server=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Server is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_shadowsocks-rust-sslocal=y/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/g' openwrt/.config
+        
+            # 3. 封杀附属小工具
+            sed -i 's/CONFIG_PACKAGE_chinadns-ng=y/# CONFIG_PACKAGE_chinadns-ng is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_dns2socks=y/# CONFIG_PACKAGE_dns2socks is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_ipt2socks=y/# CONFIG_PACKAGE_ipt2socks is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_microsocks=y/# CONFIG_PACKAGE_microsocks is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_tcping=y/# CONFIG_PACKAGE_tcping is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_geoview=y/# CONFIG_PACKAGE_geoview is not set/g' openwrt/.config
+            sed -i 's/CONFIG_PACKAGE_simple-obfs-client=y/# CONFIG_PACKAGE_simple-obfs-client is not set/g' openwrt/.config
           fi
           
           cd openwrt
@@ -520,11 +544,11 @@ jobs:
           fi
           fi
           
-          # 💡 将 personal 的发布固定收集到单一的 'Personal' 页面
+          # 💡 将 personal 的发布固定收集到单一的 'personal' 页面
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
-          TAG_NAME="Personal"
+            TAG_NAME="personal"
           else
-          TAG_NAME="${BUILD_DATE}"
+            TAG_NAME="${BUILD_DATE}"
           fi
           
           echo "✅ 最终设定的 Release 标签为: $TAG_NAME"

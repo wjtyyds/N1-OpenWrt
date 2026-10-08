@@ -27,15 +27,6 @@ clone_latest_tag() {
 mkdir -p package/custom
 
 # ==========================================
-# 0.5 锁定 Golang 版本，修复 Xray-core 编译报错
-# ==========================================
-echo "正在替换 Golang 源码为 27.x (Go 1.27) 稳定版本..."
-rm -rf feeds/packages/lang/golang
-git clone -b 27.x --depth 1 https://github.com/sbwml/packages_lang_golang.git feeds/packages/lang/golang
-
-./scripts/feeds install -a -f
-
-# ==========================================
 # 1. 核心大分流：各源码隔离操作 (插件卸载与拉取)
 # ==========================================
 
@@ -55,23 +46,32 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
         ./scripts/feeds uninstall "$plugin" || true
         rm -rf feeds/packages/*/*/"$plugin"
         rm -rf feeds/luci/*/*/"$plugin"
-        # 循环中一并斩断 helloworld 下的同名包
         rm -rf feeds/helloworld/"$plugin" 2>/dev/null
     done
 
+    # 💡 核心修复：为 Public 版的 passwall 让路，强制删除系统自带的老旧核心
     rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
-    # 把 helloworld 库里的老底彻底抄掉
     rm -rf feeds/helloworld/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls} 2>/dev/null
     rm -rf feeds/luci/applications/luci-app-passwall
 
+    if [ "$BUILD_TYPE" == "personal" ]; then
+        echo "【Personal 版本】：执行终极物理阉割，抹除 Docker 与 剩余代理组件..."
+        rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose} 2>/dev/null
+        rm -rf feeds/luci/applications/luci-app-dockerman 2>/dev/null
+        rm -rf feeds/helloworld 2>/dev/null
+    fi
+
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
-    git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
+
+    if [ "$BUILD_TYPE" != "personal" ]; then
+        git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
+        clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
+    fi
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
-    clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     echo "正在获取 OpenClash 最新版本..."
@@ -83,16 +83,17 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     git config core.sparseCheckout true
     echo "luci-app-openclash/*" >> .git/info/sparse-checkout
     if [ -n "$OPENCLASH_TAG" ]; then
-        echo "✅ 成功获取 OpenClash Tag: $OPENCLASH_TAG"
         git pull --depth 1 origin "$OPENCLASH_TAG"
     else
-        echo "❌ 获取 OpenClash Tag 失败！API响应前15行："
-        echo "$OPENCLASH_RESP" | head -n 15
         git pull --depth 1 origin master
     fi
     mv luci-app-openclash $GITHUB_WORKSPACE/openwrt/package/custom/
     cd $GITHUB_WORKSPACE/openwrt
     rm -rf /tmp/OpenClash
+
+    # 修复 LEDE 源码下 Aurora 主题页脚空括号问题
+    echo "修复 LEDE Aurora 主题页脚空括号..."
+    find package/custom/luci-theme-aurora -name "footer.ut" -exec sed -i 's/({{ version.distrevision }})/{% if (version.distrevision): %} ({{ version.distrevision }}){% endif %}/g' {} +
 
 elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     echo "====== 开始执行 ImmortalWrt 专属定制 ======"
@@ -116,19 +117,31 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
         ./scripts/feeds uninstall "$plugin" || true
         rm -rf feeds/packages/*/*/"$plugin"
         rm -rf feeds/luci/*/*/"$plugin"
+        rm -rf feeds/helloworld/"$plugin" 2>/dev/null
     done
 
+    # 💡 核心修复：清理官方包中干涉 Passwall 核心的旧版组件
     rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
     rm -rf feeds/luci/applications/luci-app-passwall
 
+    if [ "$BUILD_TYPE" == "personal" ]; then
+        echo "【Personal 版本】：执行终极物理阉割，抹除 Docker 等环境组件..."
+        rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose} 2>/dev/null
+        rm -rf feeds/luci/applications/luci-app-dockerman 2>/dev/null
+        rm -rf feeds/helloworld 2>/dev/null
+    fi
+
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
-    git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
+
+    if [ "$BUILD_TYPE" != "personal" ]; then
+        git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
+        clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
+    fi
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
-    clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     echo "正在获取 OpenClash 最新版本..."
@@ -140,11 +153,8 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     git config core.sparseCheckout true
     echo "luci-app-openclash/*" >> .git/info/sparse-checkout
     if [ -n "$OPENCLASH_TAG" ]; then
-        echo "✅ 成功获取 OpenClash Tag: $OPENCLASH_TAG"
         git pull --depth 1 origin "$OPENCLASH_TAG"
     else
-        echo "❌ 获取 OpenClash Tag 失败！API响应前15行："
-        echo "$OPENCLASH_RESP" | head -n 15
         git pull --depth 1 origin master
     fi
     mv luci-app-openclash $GITHUB_WORKSPACE/openwrt/package/custom/
@@ -154,18 +164,25 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
 elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     echo "====== 开始执行 官方 OpenWrt 专属定制 ======"
 
-    # 💡 [选项1]：完整替换 Docker 引擎以适配对应分支
-    if [[ "$SOURCE_BRANCH" =~ ^v([0-9]+\.[0-9]+) ]]; then
-        IMM_PKG_BRANCH="openwrt-${BASH_REMATCH[1]}"
-    else
-        IMM_PKG_BRANCH="master"
-    fi
+    if [ "$BUILD_TYPE" != "personal" ]; then
+        echo "【Public 版本专属】：更新 Golang 源码并替换高版本 Docker 引擎..."
+        rm -rf feeds/packages/lang/golang
+        git clone -b 27.x --depth 1 https://github.com/sbwml/packages_lang_golang.git feeds/packages/lang/golang
 
-    echo "--- 正在从 immortalwrt/packages 的 $IMM_PKG_BRANCH 分支完整替换 Docker 组件引擎 ---"
-    rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose}
-    git clone -b "$IMM_PKG_BRANCH" --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
-    cp -r /tmp/imm_packages/utils/{docker,dockerd,containerd,runc,docker-compose} feeds/packages/utils/ || true
-    rm -rf /tmp/imm_packages
+        if [[ "$SOURCE_BRANCH" =~ ^v([0-9]+\.[0-9]+) ]]; then
+            IMM_PKG_BRANCH="openwrt-${BASH_REMATCH[1]}"
+        else
+            IMM_PKG_BRANCH="master"
+        fi
+        echo "--- 正在从 immortalwrt/packages 的 $IMM_PKG_BRANCH 分支完整替换 Docker 组件引擎 ---"
+        rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose}
+        git clone -b "$IMM_PKG_BRANCH" --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
+        cp -r /tmp/imm_packages/utils/{docker,dockerd,containerd,runc,docker-compose} feeds/packages/utils/ || true
+        rm -rf /tmp/imm_packages
+
+        # 由于更新了 Go，重新安装 feeds 以生效
+        ./scripts/feeds install -a -f
+    fi
 
     openwrt_conflict_plugins=(
         "adguardhome" "luci-app-adguardhome"
@@ -179,20 +196,32 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
         ./scripts/feeds uninstall "$plugin" || true
         rm -rf feeds/packages/*/*/"$plugin"
         rm -rf feeds/luci/*/*/"$plugin"
+        rm -rf feeds/helloworld/"$plugin" 2>/dev/null
     done
 
+    # 💡 核心修复：清理官方包中干涉 Passwall 核心的旧版组件
     rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
     rm -rf feeds/luci/applications/luci-app-passwall
+
+    if [ "$BUILD_TYPE" == "personal" ]; then
+        echo "【Personal 版本】：执行终极物理阉割，抹除 Docker 等环境组件..."
+        rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose} 2>/dev/null
+        rm -rf feeds/luci/applications/luci-app-dockerman 2>/dev/null
+        rm -rf feeds/helloworld 2>/dev/null
+    fi
 
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/lisaac/luci-app-diskman package/custom/luci-app-diskman
     git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
-    git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
+
+    if [ "$BUILD_TYPE" != "personal" ]; then
+        git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
+        clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
+    fi
 
     clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
     clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
-    clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
 
     OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
     echo "正在获取 OpenClash 最新版本..."
@@ -204,11 +233,8 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     git config core.sparseCheckout true
     echo "luci-app-openclash/*" >> .git/info/sparse-checkout
     if [ -n "$OPENCLASH_TAG" ]; then
-        echo "✅ 成功获取 OpenClash Tag: $OPENCLASH_TAG"
         git pull --depth 1 origin "$OPENCLASH_TAG"
     else
-        echo "❌ 获取 OpenClash Tag 失败！API响应前15行："
-        echo "$OPENCLASH_RESP" | head -n 15
         git pull --depth 1 origin master
     fi
     mv luci-app-openclash $GITHUB_WORKSPACE/openwrt/package/custom/
@@ -220,9 +246,9 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
 fi
 
 if [ "$BUILD_TYPE" == "public" ]; then
-    echo "【公共版】：使用源码集成的 Docker 与 Dockerman 组件..."
+    echo "【公共版】：已配置拉取完整编译组件..."
 else
-    echo "【私有版】：无需 Docker，跳过相关组件拉取..."
+    echo "【私有版】：已阻断相关外部代理仓库及组件克隆..."
 fi
 
 # ==========================================
