@@ -258,8 +258,17 @@ if [ "$BUILD_TYPE" == "public" ]; then
     git clone --depth 1 https://github.com/linkease/nas-packages.git package/custom/nas-packages
     git clone --depth 1 https://github.com/linkease/nas-packages-luci.git package/custom/nas-packages-luci
 
+    echo "【清理冲突插件】：删除源码自带的 dae/daed..."
+    # 删除自带的 LuCI 界面
+    rm -rf feeds/luci/applications/luci-app-dae
+    rm -rf feeds/luci/applications/luci-app-daed
+
+    # 删除自带的核心依赖包
+    rm -rf feeds/packages/net/dae
+    rm -rf feeds/packages/net/daed
+
     # 新增：拉取 dae 与 daed 源码
-    echo "拉取 daede 源码..."
+    echo "【拉取原生插件】：正在克隆 kenzok8 维护的原生 daede 源码..."
     git clone --depth 1 https://github.com/kenzok8/openwrt-daede.git package/custom/daede
 else
     echo "【私有版】：已阻断相关外部代理仓库及组件克隆..."
