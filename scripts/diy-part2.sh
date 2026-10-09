@@ -257,6 +257,10 @@ if [ "$BUILD_TYPE" == "public" ]; then
     git clone --depth 1 https://github.com/linkease/istore.git package/custom/istore
     git clone --depth 1 https://github.com/linkease/nas-packages.git package/custom/nas-packages
     git clone --depth 1 https://github.com/linkease/nas-packages-luci.git package/custom/nas-packages-luci
+
+    # 新增：拉取 dae 与 daed 源码
+    echo "拉取 daede 源码..."
+    git clone --depth 1 https://github.com/kenzok8/openwrt-daede.git package/custom/daede
 else
     echo "【私有版】：已阻断相关外部代理仓库及组件克隆..."
 fi

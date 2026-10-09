@@ -227,6 +227,8 @@ jobs:
             echo "====== 开始注入 Public 版本专属插件 ======"
             echo "CONFIG_PACKAGE_luci-app-store=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_luci-app-quickstart=y" >> openwrt/.config
+            # 新增：勾选 daede 控制面板
+            echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
           fi
           
           cd openwrt
