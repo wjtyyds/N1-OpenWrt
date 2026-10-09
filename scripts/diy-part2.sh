@@ -251,6 +251,12 @@ fi
 
 if [ "$BUILD_TYPE" == "public" ]; then
     echo "【公共版】：已配置拉取完整编译组件..."
+
+    # ========== 新增：拉取 iStore 商店与 QuickStart 向导源码 ==========
+    echo "拉取 iStore 与 QuickStart 相关依赖..."
+    git clone --depth 1 https://github.com/linkease/istore.git package/custom/istore
+    git clone --depth 1 https://github.com/linkease/nas-packages.git package/custom/nas-packages
+    git clone --depth 1 https://github.com/linkease/nas-packages-luci.git package/custom/nas-packages-luci
 else
     echo "【私有版】：已阻断相关外部代理仓库及组件克隆..."
 fi
