@@ -231,7 +231,8 @@ jobs:
             echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
           fi
           
-          # 明确告诉系统使用 Ubuntu 宿主机的 Clang 编译器来构建 eBPF
+          # 明确开启开发者选项并指定宿主机 Clang 编译器来构建 eBPF
+          echo "CONFIG_DEVEL=y" >> openwrt/.config
           echo "CONFIG_BPF_TOOLCHAIN_HOST=y" >> openwrt/.config
           
           cd openwrt
