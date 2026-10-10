@@ -252,16 +252,11 @@ fi
 if [ "$BUILD_TYPE" == "public" ]; then
     echo "【公共版】：已配置拉取完整编译组件..."
 
-    # ========== 正确拉取 iStore 商店与 QuickStart 源码（解决依赖断裂） ==========
-    echo "将 iStore 与 QuickStart 仓库作为源引入..."
-    echo "src-git istore https://github.com/linkease/istore.git" >> feeds.conf.default
-    echo "src-git nas_packages https://github.com/linkease/nas-packages.git" >> feeds.conf.default
-    echo "src-git nas_luci https://github.com/linkease/nas-packages-luci.git" >> feeds.conf.default
-
-    ./scripts/feeds update istore nas_packages nas_luci
-    ./scripts/feeds install -a -p istore
-    ./scripts/feeds install -a -p nas_packages
-    ./scripts/feeds install -a -p nas_luci
+    # ========== 按 iStore 官方文档方式集成，仅引入 store ==========
+    echo "将 iStore 仓库作为源引入..."
+    echo 'src-git istore https://github.com/linkease/istore;main' >> feeds.conf.default
+    ./scripts/feeds update istore
+    ./scripts/feeds install -d y -p istore luci-app-store
 
     echo "【清理冲突插件】：删除源码自带的 dae/daed..."
     rm -rf feeds/luci/applications/luci-app-dae

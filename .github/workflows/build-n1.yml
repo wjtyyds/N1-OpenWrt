@@ -94,6 +94,10 @@ jobs:
           sudo apt-get clean
           
           sudo timedatectl set-timezone "Asia/Shanghai"
+          
+          # 新增：记录流水线刚启动时的日期，用于 Release Tag
+          echo "START_DATE=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
+          
           echo "✅ 环境安装完毕！"
 
       - name: Clone Source Code
@@ -226,10 +230,13 @@ jobs:
           
           if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
             echo "====== 开始注入 Public 版本专属插件 ======"
+          
+            # iStore
             echo "CONFIG_PACKAGE_luci-app-store=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-quickstart=y" >> openwrt/.config
-            # 新增：勾选 daede 控制面板
+            
+            # daede 控制面板 (默认会拉取 daed 核心) 以及纯净版 dae 核心
             echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
           fi
           
           # 明确开启开发者选项并指定宿主机 Clang 编译器来构建 eBPF
@@ -547,14 +554,15 @@ jobs:
           # ==========================================
           BRANCH_NAME="${{ github.ref_name }}"
           
+          # 使用启动时记录的固定日期，而不是 $(date +%Y.%m.%d)
           if [ "$BRANCH_NAME" == "main" ] || [ "$BRANCH_NAME" == "master" ]; then
-          BUILD_DATE="v$(date +%Y.%m.%d)"
+            BUILD_DATE="v${{ env.START_DATE }}"
           else
-          if [[ "$BRANCH_NAME" != v* ]]; then
-          BUILD_DATE="v${BRANCH_NAME}"
-          else
-          BUILD_DATE="${BRANCH_NAME}"
-          fi
+            if [[ "$BRANCH_NAME" != v* ]]; then
+              BUILD_DATE="v${BRANCH_NAME}"
+            else
+              BUILD_DATE="${BRANCH_NAME}"
+            fi
           fi
           
           # 💡 将 personal 的发布固定收集到单一的 'personal' 页面
