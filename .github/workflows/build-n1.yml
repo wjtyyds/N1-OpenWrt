@@ -84,7 +84,7 @@ jobs:
           sudo apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
           
           echo "安装核心依赖..."
-          sudo apt-get -y install clang llvm jq $(curl -fsSL https://ophub.org/ubuntu2204-make-openwrt-depends)
+          sudo apt-get -y install clang llvm jq dwarves libelf-dev $(curl -fsSL https://ophub.org/ubuntu2204-make-openwrt-depends)
           
           echo "重载系统守护进程..."
           sudo systemctl daemon-reload
