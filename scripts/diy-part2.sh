@@ -252,24 +252,26 @@ fi
 if [ "$BUILD_TYPE" == "public" ]; then
     echo "【公共版】：已配置拉取完整编译组件..."
 
-    # ========== 新增：拉取 iStore 商店与 QuickStart 向导源码 ==========
-    echo "拉取 iStore 与 QuickStart 相关依赖..."
-    git clone --depth 1 https://github.com/linkease/istore.git package/custom/istore
-    git clone --depth 1 https://github.com/linkease/nas-packages.git package/custom/nas-packages
-    git clone --depth 1 https://github.com/linkease/nas-packages-luci.git package/custom/nas-packages-luci
+    # ========== 正确拉取 iStore 商店与 QuickStart 源码（解决依赖断裂） ==========
+    echo "将 iStore 与 QuickStart 仓库作为源引入..."
+    echo "src-git istore https://github.com/linkease/istore.git" >> feeds.conf.default
+    echo "src-git nas_packages https://github.com/linkease/nas-packages.git" >> feeds.conf.default
+    echo "src-git nas_luci https://github.com/linkease/nas-packages-luci.git" >> feeds.conf.default
+
+    ./scripts/feeds update istore nas_packages nas_luci
+    ./scripts/feeds install -a -p istore
+    ./scripts/feeds install -a -p nas_packages
+    ./scripts/feeds install -a -p nas_luci
 
     echo "【清理冲突插件】：删除源码自带的 dae/daed..."
-    # 删除自带的 LuCI 界面
     rm -rf feeds/luci/applications/luci-app-dae
     rm -rf feeds/luci/applications/luci-app-daed
-
-    # 删除自带的核心依赖包
     rm -rf feeds/packages/net/dae
     rm -rf feeds/packages/net/daed
 
-    # 新增：拉取 dae 与 daed 源码
+    # 新增：拉取 dae 与 daed 源码 (使用 clone_latest_tag)
     echo "【拉取原生插件】：正在克隆 kenzok8 维护的原生 daede 源码..."
-    git clone --depth 1 https://github.com/kenzok8/openwrt-daede.git package/custom/daede
+    clone_latest_tag "https://github.com/kenzok8/openwrt-daede" "daede"
 else
     echo "【私有版】：已阻断相关外部代理仓库及组件克隆..."
 fi
