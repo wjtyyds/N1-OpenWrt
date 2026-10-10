@@ -250,7 +250,26 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
 fi
 
 if [ "$BUILD_TYPE" == "public" ]; then
-    echo "【公共版】：已配置拉取完整编译组件..."
+echo "【公共版】：已配置拉取完整编译组件..."
+
+    # ========== 遵循最新架构：分离拉取 iStore 后端与前端 UI ==========
+    echo "拉取 iStore 核心与 UI 源码..."
+    # 移除原本的 feeds 注入，直接克隆到本地包目录优先级最高
+    git clone --depth 1 https://github.com/linkease/istore.git package/custom/istore
+    git clone --depth 1 https://github.com/linkease/istore-ui.git package/custom/istore-ui
+
+    # 强制修改 iStore 语言判断逻辑，直接让 vue_lang() 函数返回 "zh-cn"
+    echo "强制锁定 iStore 界面为中文..."
+    find package/custom/istore -name "store.lua" -type f -exec sed -i 's/local lang = i18n.translate("istore_vue_lang")/return "zh-cn"/g' {} +
+
+    echo "【清理冲突插件】：删除源码自带的 dae/daed..."
+    rm -rf feeds/luci/applications/luci-app-dae
+    rm -rf feeds/luci/applications/luci-app-daed
+    rm -rf feeds/packages/net/dae
+    rm -rf feeds/packages/net/daed
+
+    echo "【拉取原生插件】：正在克隆 kenzok8 维护的原生 daede 源码..."
+    clone_latest_tag "https://github.com/kenzok8/openwrt-daede" "daede"
 else
     echo "【私有版】：已阻断相关外部代理仓库及组件克隆..."
 fi

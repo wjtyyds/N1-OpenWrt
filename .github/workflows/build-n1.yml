@@ -84,7 +84,7 @@ jobs:
           sudo apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
           
           echo "安装核心依赖..."
-          sudo apt-get -y install jq $(curl -fsSL https://ophub.org/ubuntu2204-make-openwrt-depends)
+          sudo apt-get -y install clang llvm jq dwarves libelf-dev $(curl -fsSL https://ophub.org/ubuntu2204-make-openwrt-depends)
           
           echo "重载系统守护进程..."
           sudo systemctl daemon-reload
@@ -94,6 +94,10 @@ jobs:
           sudo apt-get clean
           
           sudo timedatectl set-timezone "Asia/Shanghai"
+          
+          # 新增：记录流水线刚启动时的日期，用于 Release Tag
+          echo "START_DATE=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
+          
           echo "✅ 环境安装完毕！"
 
       - name: Clone Source Code
@@ -183,7 +187,7 @@ jobs:
           
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
             echo "====== 开始注入 Personal 版本专属强效断根指令 ======"
-        
+          
             # 1. 明确禁止 Docker 及其所有底层组件的编译 (防死灰复燃)
             sed -i 's/CONFIG_PACKAGE_luci-app-dockerman=y/# CONFIG_PACKAGE_luci-app-dockerman is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_luci-lib-docker=y/# CONFIG_PACKAGE_luci-lib-docker is not set/g' openwrt/.config
@@ -194,7 +198,7 @@ jobs:
             sed -i 's/CONFIG_PACKAGE_runc=y/# CONFIG_PACKAGE_runc is not set/g' openwrt/.config
             sed -i 's/CONFIG_DOCKER_NET_MACVLAN=y/# CONFIG_DOCKER_NET_MACVLAN is not set/g' openwrt/.config
             sed -i 's/CONFIG_DOCKER_STO_EXT4=y/# CONFIG_DOCKER_STO_EXT4 is not set/g' openwrt/.config
-        
+          
             # 2. 彻底封杀 Passwall / SSR+ 及一切底层代理组件
             sed -i 's/CONFIG_PACKAGE_luci-app-passwall=y/# CONFIG_PACKAGE_luci-app-passwall is not set/g' openwrt/.config
             sed -i '/CONFIG_PACKAGE_luci-app-passwall_/d' openwrt/.config
@@ -212,8 +216,9 @@ jobs:
             sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Server=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Server is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_shadowsocks-rust-sslocal=y/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/g' openwrt/.config
-        
+          
             # 3. 封杀附属小工具
+            sed -i 's/CONFIG_PACKAGE_haproxy=y/# CONFIG_PACKAGE_haproxy is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_chinadns-ng=y/# CONFIG_PACKAGE_chinadns-ng is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_dns2socks=y/# CONFIG_PACKAGE_dns2socks is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_ipt2socks=y/# CONFIG_PACKAGE_ipt2socks is not set/g' openwrt/.config
@@ -222,6 +227,25 @@ jobs:
             sed -i 's/CONFIG_PACKAGE_geoview=y/# CONFIG_PACKAGE_geoview is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_simple-obfs-client=y/# CONFIG_PACKAGE_simple-obfs-client is not set/g' openwrt/.config
           fi
+          
+          if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
+            echo "====== 开始注入 Public 版本专属插件 ======"
+          
+            # iStore 完整依赖链 (核心 + 前端 UI + 底层支持)
+            echo "CONFIG_PACKAGE_luci-app-store=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_app-store-ui=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-lib-taskd=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-lib-xterm=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_taskd=y" >> openwrt/.config
+          
+            # daede 控制面板及纯净版 dae 核心
+            echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
+          fi
+          
+          # 明确开启开发者选项并指定宿主机 Clang 编译器来构建 eBPF
+          echo "CONFIG_DEVEL=y" >> openwrt/.config
+          echo "CONFIG_BPF_TOOLCHAIN_HOST=y" >> openwrt/.config
           
           cd openwrt
           make defconfig
@@ -534,14 +558,15 @@ jobs:
           # ==========================================
           BRANCH_NAME="${{ github.ref_name }}"
           
+          # 使用启动时记录的固定日期，而不是 $(date +%Y.%m.%d)
           if [ "$BRANCH_NAME" == "main" ] || [ "$BRANCH_NAME" == "master" ]; then
-          BUILD_DATE="v$(date +%Y.%m.%d)"
+            BUILD_DATE="v${{ env.START_DATE }}"
           else
-          if [[ "$BRANCH_NAME" != v* ]]; then
-          BUILD_DATE="v${BRANCH_NAME}"
-          else
-          BUILD_DATE="${BRANCH_NAME}"
-          fi
+            if [[ "$BRANCH_NAME" != v* ]]; then
+              BUILD_DATE="v${BRANCH_NAME}"
+            else
+              BUILD_DATE="${BRANCH_NAME}"
+            fi
           fi
           
           # 💡 将 personal 的发布固定收集到单一的 'personal' 页面
