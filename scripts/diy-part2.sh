@@ -250,17 +250,25 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
 fi
 
 if [ "$BUILD_TYPE" == "public" ]; then
-echo "【公共版】：已配置拉取完整编译组件..."
+    echo "【公共版】：已配置拉取完整编译组件..."
 
-    # ========== 遵循最新架构：分离拉取 iStore 后端与前端 UI ==========
-    echo "拉取 iStore 核心与 UI 源码..."
+    # ========== 遵循最新架构：仅拉取 iStore 核心源码 ==========
+    echo "拉取 iStore 核心源码..."
     # 移除原本的 feeds 注入，直接克隆到本地包目录优先级最高
     git clone --depth 1 https://github.com/linkease/istore.git package/custom/istore
-    git clone --depth 1 https://github.com/linkease/istore-ui.git package/custom/istore-ui
 
-    # 强制修改 iStore 语言判断逻辑，直接让 vue_lang() 函数返回 "zh-cn"
-    echo "强制锁定 iStore 界面为中文..."
-    find package/custom/istore -name "store.lua" -type f -exec sed -i 's/local lang = i18n.translate("istore_vue_lang")/return "zh-cn"/g' {} +
+    # --- 1. 编译环境适配：处理 OpenWrt 25.x 依赖变更问题 ---
+    # 如果不是 lede 源码 (即 OpenWrt 25.12 或类似的新架构)
+    if [[ "$FIRMWARE_TYPE" != lede* ]]; then
+        echo "检测到非 LEDE 新版环境，强行剔除 iStore 缺失的旧版依赖以保证编译..."
+        sed -i 's/+mount-utils//g' package/custom/istore/luci/luci-app-store/Makefile
+        sed -i 's/+!TAR_XZ:xz-utils//g' package/custom/istore/luci/luci-app-store/Makefile
+        sed -i 's/+tar//g' package/custom/istore/luci/luci-app-store/Makefile
+    fi
+
+    # --- 2. 完美锁定中文界面方案：安全替换 Lua 变量，不破坏语法 ---
+    echo "安全修改 Lua 逻辑，强制锁定 iStore 界面为中文..."
+    sed -i 's/i18n.translate("istore_vue_lang")/"zh-cn"/g' package/custom/istore/luci/luci-app-store/luasrc/controller/store.lua
 
     echo "【清理冲突插件】：删除源码自带的 dae/daed..."
     rm -rf feeds/luci/applications/luci-app-dae
