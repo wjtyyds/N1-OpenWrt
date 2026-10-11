@@ -359,3 +359,11 @@ uci commit AdGuardHome
 rm -f /etc/uci-defaults/97_personal_setup
 EOF
 fi
+
+# ==========================================
+# 针对 Lede 原生编译的专属补丁注入
+# ==========================================
+if [ "$FIRMWARE_TYPE" == "lede-native" ]; then
+    echo "【原生编译专属】：打上 N1 eMMC 分区扩容补丁..."
+    patch -p1 < $GITHUB_WORKSPACE/patches/custom_target_amlogic_scripts.patch
+fi
