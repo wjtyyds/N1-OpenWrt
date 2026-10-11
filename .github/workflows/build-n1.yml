@@ -235,6 +235,7 @@ jobs:
             echo "CONFIG_PACKAGE_luci-app-store=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_app-store-ui=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_luci-lib-taskd=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-i18n-taskd-zh-cn=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_luci-lib-xterm=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_taskd=y" >> openwrt/.config
           
@@ -290,10 +291,7 @@ jobs:
           
           echo "KERNEL_VERSION=$REAL_KERNEL_VER" >> make.env
           echo "OPENWRT_VER=$OPENWRT_VER" >> make.env
-          
-          if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
-            echo "WHOAMI=${{ github.repository_owner }}" >> make.env
-          fi
+          echo "WHOAMI=粉墨悲欢@恩山" >> make.env
           
           ROOTFS_FILE=$(find ../openwrt/bin/targets/ -type f -name "*-rootfs.tar.gz" | head -n 1)
           sudo mv "$ROOTFS_FILE" ./openwrt-armvirt-64-default-rootfs.tar.gz

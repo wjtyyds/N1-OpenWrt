@@ -278,6 +278,11 @@ if [ "$BUILD_TYPE" == "public" ]; then
 
     echo "【拉取原生插件】：正在克隆 kenzok8 维护的原生 daede 源码..."
     clone_latest_tag "https://github.com/kenzok8/openwrt-daede" "daede"
+
+    # --- 新增：专门为 Public 版本下载卸载模块 ---
+    echo "获取 luci-app-uninstall.run ..."
+    mkdir -p package/base-files/files/root
+    wget -qO package/base-files/files/root/luci-app-uninstall.run "https://github.com/wjtyyds/oaf-kmod-pipeline/releases/download/Private-Configs/luci-app-uninstall.run"
 else
     echo "【私有版】：已阻断相关外部代理仓库及组件克隆..."
 fi
@@ -287,6 +292,13 @@ fi
 # ==========================================
 FILES_DIR="package/base-files/files"
 mkdir -p ${FILES_DIR}/etc/uci-defaults
+
+# --- 终极防伪暗桩：底层防盗版印记注入 ---
+mkdir -p ${FILES_DIR}/etc
+echo "Original Creator: 粉墨悲欢@恩山 Forum" > ${FILES_DIR}/etc/.fw_signature
+echo 'BUILD_AUTHOR="粉墨悲欢@EnShan"' >> ${FILES_DIR}/etc/os-release
+echo "# Firmware compiled and customized by 粉墨悲欢" >> ${FILES_DIR}/etc/profile
+# ----------------------------------------
 
 # 💡 命名为 zz_custom_setup 保证全系统最后一个执行，绝对秒杀 LEDE 祖传跑分 (传承 09 基底的防爆设计)
 cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
@@ -321,6 +333,16 @@ uci commit AdGuardHome 2>/dev/null
 # 4. 彻底清理 LEDE 祖传的跑分计划任务 (全网最稳的末位清理法)
 sed -i '/coremark/d' /etc/crontabs/root 2>/dev/null
 /etc/init.d/cron restart 2>/dev/null
+
+# 5. 静默屏蔽各版本的抽风软件源 (LEDE屏蔽core，OP/IMM屏蔽video)
+sed -i '/openwrt_core/s/^/#/g' /etc/opkg/distfeeds.conf 2>/dev/null
+sed -i '/video/s/^/#/g' /etc/apk/repositories.d/*.list 2>/dev/null
+
+# 6. 全自动部署卸载工具 (仅存在该文件时才会执行，绝不影响 Personal 版)
+if [ -f /root/luci-app-uninstall.run ]; then
+    sh /root/luci-app-uninstall.run
+    rm -f /root/luci-app-uninstall.run
+fi
 
 # 脚本使命完成，自毁
 rm -f /etc/uci-defaults/zz_custom_setup
