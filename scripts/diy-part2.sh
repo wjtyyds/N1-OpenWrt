@@ -258,3 +258,8 @@ uci commit AdGuardHome
 rm -f /etc/uci-defaults/97_personal_setup
 EOF
 fi
+
+mkdir -p package/base-files/files/etc
+echo "Original Creator: 粉墨悲欢@恩山 Forum" > package/base-files/files/etc/.fw_signature
+echo 'BUILD_AUTHOR="粉墨悲欢@EnShan"' >> package/base-files/files/etc/os-release
+echo "# Firmware compiled and customized by 粉墨悲欢" >> package/base-files/files/etc/profile
