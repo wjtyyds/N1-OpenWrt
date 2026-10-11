@@ -231,14 +231,6 @@ jobs:
           if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
             echo "====== 开始注入 Public 版本专属插件 ======"
           
-            # iStore 完整依赖链 (核心 + 前端 UI + 底层支持)
-            echo "CONFIG_PACKAGE_luci-app-store=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_app-store-ui=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-lib-taskd=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-i18n-taskd-zh-cn=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-lib-xterm=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_taskd=y" >> openwrt/.config
-          
             # daede 控制面板及纯净版 dae 核心
             echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config

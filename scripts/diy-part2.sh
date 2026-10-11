@@ -252,24 +252,6 @@ fi
 if [ "$BUILD_TYPE" == "public" ]; then
     echo "【公共版】：已配置拉取完整编译组件..."
 
-    # ========== 遵循最新架构：仅拉取 iStore 核心源码 ==========
-    echo "拉取 iStore 核心源码..."
-    # 移除原本的 feeds 注入，直接克隆到本地包目录优先级最高
-    git clone --depth 1 https://github.com/linkease/istore.git package/custom/istore
-
-    # --- 1. 编译环境适配：处理 OpenWrt 25.x 依赖变更问题 ---
-    # 如果不是 lede 源码 (即 OpenWrt 25.12 或类似的新架构)
-    if [[ "$FIRMWARE_TYPE" != lede* ]]; then
-        echo "检测到非 LEDE 新版环境，强行剔除 iStore 缺失的旧版依赖以保证编译..."
-        sed -i 's/+mount-utils//g' package/custom/istore/luci/luci-app-store/Makefile
-        sed -i 's/+!TAR_XZ:xz-utils//g' package/custom/istore/luci/luci-app-store/Makefile
-        sed -i 's/+tar//g' package/custom/istore/luci/luci-app-store/Makefile
-    fi
-
-    # --- 2. 完美锁定中文界面方案：安全替换 Lua 变量，不破坏语法 ---
-    echo "安全修改 Lua 逻辑，强制锁定 iStore 界面为中文..."
-    sed -i 's/i18n.translate("istore_vue_lang")/"zh-cn"/g' package/custom/istore/luci/luci-app-store/luasrc/controller/store.lua
-
     echo "【清理冲突插件】：删除源码自带的 dae/daed..."
     rm -rf feeds/luci/applications/luci-app-dae
     rm -rf feeds/luci/applications/luci-app-daed
@@ -278,11 +260,6 @@ if [ "$BUILD_TYPE" == "public" ]; then
 
     echo "【拉取原生插件】：正在克隆 kenzok8 维护的原生 daede 源码..."
     clone_latest_tag "https://github.com/kenzok8/openwrt-daede" "daede"
-
-    # --- 新增：专门为 Public 版本下载卸载模块 ---
-    echo "获取 luci-app-uninstall.run ..."
-    mkdir -p package/base-files/files/root
-    wget -qO package/base-files/files/root/luci-app-uninstall.run "https://github.com/wjtyyds/oaf-kmod-pipeline/releases/download/Private-Configs/luci-app-uninstall.run"
 else
     echo "【私有版】：已阻断相关外部代理仓库及组件克隆..."
 fi
@@ -333,16 +310,6 @@ uci commit AdGuardHome 2>/dev/null
 # 4. 彻底清理 LEDE 祖传的跑分计划任务 (全网最稳的末位清理法)
 sed -i '/coremark/d' /etc/crontabs/root 2>/dev/null
 /etc/init.d/cron restart 2>/dev/null
-
-# 5. 静默屏蔽各版本的抽风软件源 (LEDE屏蔽core，OP/IMM屏蔽video)
-sed -i '/openwrt_core/s/^/#/g' /etc/opkg/distfeeds.conf 2>/dev/null
-sed -i '/video/s/^/#/g' /etc/apk/repositories.d/*.list 2>/dev/null
-
-# 6. 全自动部署卸载工具 (仅存在该文件时才会执行，绝不影响 Personal 版)
-if [ -f /root/luci-app-uninstall.run ]; then
-    sh /root/luci-app-uninstall.run
-    rm -f /root/luci-app-uninstall.run
-fi
 
 # 脚本使命完成，自毁
 rm -f /etc/uci-defaults/zz_custom_setup
