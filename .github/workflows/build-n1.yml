@@ -172,7 +172,10 @@ jobs:
 
       - name: Load Configuration
         run: |
-          cp configs/${{ env.FIRMWARE_LOWER }}.config openwrt/.config
+          # 如果是原生编译，强制映射到 lede.config
+          CONF_NAME="${{ env.FIRMWARE_LOWER }}"
+          if [ "$CONF_NAME" == "lede-native" ]; then CONF_NAME="lede"; fi
+          cp configs/${CONF_NAME}.config openwrt/.config
           
           # 强制关闭 Debug 调试和 GDB
           sed -i 's/CONFIG_KERNEL_DEBUG_INFO=y/# CONFIG_KERNEL_DEBUG_INFO is not set/g' openwrt/.config
