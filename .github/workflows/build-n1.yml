@@ -286,19 +286,31 @@ jobs:
               chmod 755 $BASE_FILES/usr/lib/adg_core/AdGuardHome
           fi
           
-          echo "提取 Lucky..."
+          echo "提取 Lucky 并进行源码级劫持..."
+          # 1. 创建一个不会引起冲突的独立暂存区
+          mkdir -p openwrt/custom_bins
+          
           if [ "$BUILD_LOWER" == "public" ]; then
-              LUCKY_FILE="lucky_2.27.2_Linux_arm64_wanji_docker.tar.gz"
+            LUCKY_FILE="lucky_2.27.2_Linux_arm64_wanji_docker.tar.gz"
           else
-              LUCKY_FILE="lucky_2.27.2_Linux_arm64_wanji.tar.gz"
+            LUCKY_FILE="lucky_2.27.2_Linux_arm64_wanji.tar.gz"
           fi
+          
           if [ -n "$PRIVATE_REPO" ]; then
-              gh release download "Private-Configs" -R "$PRIVATE_REPO" -p "$LUCKY_FILE" --clobber >/dev/null 2>&1 || true
+            gh release download "Private-Configs" -R "$PRIVATE_REPO" -p "$LUCKY_FILE" --clobber >/dev/null 2>&1 || true
           fi
+          
           if [ -f "$LUCKY_FILE" ]; then
-              tar -xzf "$LUCKY_FILE" -C /tmp/
-              mv $(find /tmp/ -type f -name "lucky" | head -n 1) $BASE_FILES/usr/bin/lucky
-              chmod 755 $BASE_FILES/usr/bin/lucky
+            tar -xzf "$LUCKY_FILE" -C /tmp/
+          
+            # 【核心改动 1】不要放进 base-files 抢坑位，放在外面的暂存区
+            mv $(find /tmp/ -type f -name "lucky" | head -n 1) openwrt/custom_bins/lucky
+            chmod 755 openwrt/custom_bins/lucky
+            
+            # 【核心改动 2：神来之笔】利用正则，动态修改 lucky 插件源码的 Makefile
+            # 把原本要去打包旧核心的指令，强制重定向到我们刚才暂存的最新私有核心上！
+            sed -i 's|$(PKG_BUILD_DIR)[^ ]*lucky|$(TOPDIR)/custom_bins/lucky|g' openwrt/package/custom/lucky/lucky/Makefile
+            echo "✅ 成功从源码层面劫持 Lucky 核心"
           fi
           
           echo "提取 OpenClash Meta..."
