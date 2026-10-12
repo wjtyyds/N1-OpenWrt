@@ -182,8 +182,9 @@ jobs:
           sed -i 's/CONFIG_KERNEL_DEBUG_KERNEL=y/# CONFIG_KERNEL_DEBUG_KERNEL is not set/g' openwrt/.config
           sed -i 's/CONFIG_GDB=y/# CONFIG_GDB is not set/g' openwrt/.config
           
-          sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=512/g' openwrt/.config
-          grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=512" >> openwrt/.config
+          # 将固件打包体积限制扩大到 1024MB，防止塞太多插件撑爆
+          sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=1024/g' openwrt/.config
+          grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> openwrt/.config
           
           # [防爆盘] 强制砍掉 Shadowsocks-Rust
           sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client is not set/g' openwrt/.config
