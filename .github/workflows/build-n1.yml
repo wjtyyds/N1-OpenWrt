@@ -245,22 +245,18 @@ jobs:
           echo "CONFIG_DEVEL=y" >> openwrt/.config
           echo "CONFIG_BPF_TOOLCHAIN_HOST=y" >> openwrt/.config
           
-          # 针对 Lede 原生编译，强行把 ext4 和 squashfs 镜像生成开关打开
-          if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
-            echo "====== 开启原生编译专属镜像配置 ======"
-          
-            # 1. 关掉不需要的 rootfs.tar.gz (极致洁癖)
-            sed -i 's/CONFIG_TARGET_ROOTFS_TARGZ=y/# CONFIG_TARGET_ROOTFS_TARGZ is not set/g' openwrt/.config
-          
-            # 2. 开启生成 .img 所必需的 ext4 和 squashfs
-            sed -i 's/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/CONFIG_TARGET_ROOTFS_EXT4FS=y/g' openwrt/.config
-            grep -q "CONFIG_TARGET_ROOTFS_SQUASHFS=y" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_SQUASHFS=y" >> openwrt/.config
-            grep -q "CONFIG_TARGET_UBIFS_FREE_SPACE_FIXUP=y" openwrt/.config || echo "CONFIG_TARGET_UBIFS_FREE_SPACE_FIXUP=y" >> openwrt/.config
+          # 针对原生编译，强行开启 EXT4，彻底关闭 SquashFS，并将系统分区扩容至 1024M
+          if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ] || [ "${{ env.FIRMWARE_LOWER }}" == "istoreos-native" ]; then
+          echo "====== 开启原生编译专属镜像配置 (强制 EXT4) ======"
+          sed -i 's/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/CONFIG_TARGET_ROOTFS_EXT4FS=y/g' openwrt/.config
+          sed -i 's/CONFIG_TARGET_ROOTFS_SQUASHFS=y/# CONFIG_TARGET_ROOTFS_SQUASHFS is not set/g' openwrt/.config
+          sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=1024/g' openwrt/.config
+          grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> openwrt/.config
           fi
           
           cd openwrt
           make defconfig
-          
+
       - name: Inject Binaries & Configs (原生编译前置注入)
         if: env.FIRMWARE_LOWER == 'lede-native'
         env:
@@ -307,7 +303,7 @@ jobs:
             # 【核心改动 1】不要放进 base-files 抢坑位，放在外面的暂存区
             mv $(find /tmp/ -type f -name "lucky" | head -n 1) openwrt/custom_bins/lucky
             chmod 755 openwrt/custom_bins/lucky
-            
+          
             # 【核心改动 2：神来之笔】利用正则，动态修改 lucky 插件源码的 Makefile
             # 把原本要去打包旧核心的指令，强制重定向到我们刚才暂存的最新私有核心上！
             sed -i 's|$(PKG_BUILD_DIR)[^ ]*lucky|$(TOPDIR)/custom_bins/lucky|g' openwrt/package/custom/lucky/lucky/Makefile
@@ -651,21 +647,27 @@ jobs:
           sudo gzip -9 output/*.img
 
       - name: Extract Native Firmware & Sync Env (提取原生镜像并对接)
-        if: env.FIRMWARE_LOWER == 'lede-native'
+        if: env.FIRMWARE_LOWER == 'lede-native' || env.FIRMWARE_LOWER == 'istoreos-native'
         run: |
           mkdir -p packit/output packit/
-          # 原生编译生成的固件直接在这里
-          IMG_FILE=$(find openwrt/bin/targets/amlogic/mesongx/ -type f -name "*sysupgrade.img.gz" | head -n 1)
+          
+          # 根据不同类型寻找镜像文件，且精准匹配 *ext4-sysupgrade.img.gz 彻底避开 SquashFS
+          if [ "${{ env.FIRMWARE_LOWER }}" == "istoreos-native" ]; then
+             IMG_FILE=$(find openwrt/bin/targets/amlogic/meson/ -type f -name "*ext4-sysupgrade.img.gz" | head -n 1)
+             REAL_KERNEL_VER=$(ls openwrt/build_dir/target-*/linux-amlogic_meson/linux-* -d 2>/dev/null | head -n 1 | awk -F'linux-' '{print $NF}')
+          else
+             IMG_FILE=$(find openwrt/bin/targets/amlogic/mesongx/ -type f -name "*ext4-sysupgrade.img.gz" | head -n 1)
+             REAL_KERNEL_VER=$(ls openwrt/build_dir/target-*/linux-amlogic_mesongx/linux-* -d 2>/dev/null | head -n 1 | awk -F'linux-' '{print $NF}')
+          fi
+          
           if [ -n "$IMG_FILE" ]; then
             cp "$IMG_FILE" packit/output/
-            echo "✅ 成功提取原生镜像"
+            echo "✅ 成功提取原生 EXT4 镜像"
           else
-            echo "❌ 找不到原生生成的 img.gz 镜像！"
+            echo "❌ 找不到原生生成的 EXT4 img.gz 镜像！"
             exit 1
           fi
-
-          # 动态解析原生内核真实版本号
-          REAL_KERNEL_VER=$(ls openwrt/build_dir/target-*/linux-amlogic_mesongx/linux-* -d 2>/dev/null | head -n 1 | awk -F'linux-' '{print $NF}')
+          
           if [ -z "$REAL_KERNEL_VER" ]; then REAL_KERNEL_VER="native"; fi
 
           # 解析版本名供最终文件命名
