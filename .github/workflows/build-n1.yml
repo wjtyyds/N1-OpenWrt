@@ -1,5 +1,5 @@
 name: Build N1 Firmware
-run-name: "📦 ${{ inputs.firmware_type }} ${{ inputs.source_branch }} | Kernel ${{ inputs.kernel_version }}-${{ inputs.kernel_builder == 'kernel_stable' && 'stable' || 'flippy' }} | ${{ inputs.build_type }}"
+run-name: "📦 ${{ inputs.firmware_type }} ${{ inputs.source_branch }} ${{ inputs.firmware_type != 'Lede-Native' && format('| Kernel {0}-{1} ', inputs.kernel_version, inputs.kernel_builder == 'kernel_stable' && 'stable' || 'flippy') || '' }}| ${{ inputs.build_type }}"
 
 on:
   workflow_dispatch:
