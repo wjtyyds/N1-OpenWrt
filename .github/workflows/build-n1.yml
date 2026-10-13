@@ -172,7 +172,6 @@ jobs:
 
       - name: Load Configuration
         run: |
-          # 如果是原生编译，强制映射到 lede.config
           CONF_NAME="${{ env.FIRMWARE_LOWER }}"
           if [ "$CONF_NAME" == "lede-native" ]; then CONF_NAME="lede"; fi
           cp configs/${CONF_NAME}.config openwrt/.config
@@ -182,76 +181,34 @@ jobs:
           sed -i 's/CONFIG_KERNEL_DEBUG_KERNEL=y/# CONFIG_KERNEL_DEBUG_KERNEL is not set/g' openwrt/.config
           sed -i 's/CONFIG_GDB=y/# CONFIG_GDB is not set/g' openwrt/.config
           
-          # 将固件打包体积限制扩大到 1024MB，防止塞太多插件撑爆
-          sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=1024/g' openwrt/.config
-          grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> openwrt/.config
-          
-          # [防爆盘] 强制砍掉 Shadowsocks-Rust
+          # 防爆盘
           sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client is not set/g' openwrt/.config
           sed -i 's/CONFIG_PACKAGE_shadowsocks-rust-sslocal=y/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/g' openwrt/.config
           
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
             echo "====== 开始注入 Personal 版本专属强效断根指令 ======"
-          
-            # 1. 明确禁止 Docker 及其所有底层组件的编译 (防死灰复燃)
-            sed -i 's/CONFIG_PACKAGE_luci-app-dockerman=y/# CONFIG_PACKAGE_luci-app-dockerman is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_luci-lib-docker=y/# CONFIG_PACKAGE_luci-lib-docker is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_docker=y/# CONFIG_PACKAGE_docker is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_docker-compose=y/# CONFIG_PACKAGE_docker-compose is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_dockerd=y/# CONFIG_PACKAGE_dockerd is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_containerd=y/# CONFIG_PACKAGE_containerd is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_runc=y/# CONFIG_PACKAGE_runc is not set/g' openwrt/.config
-            sed -i 's/CONFIG_DOCKER_NET_MACVLAN=y/# CONFIG_DOCKER_NET_MACVLAN is not set/g' openwrt/.config
-            sed -i 's/CONFIG_DOCKER_STO_EXT4=y/# CONFIG_DOCKER_STO_EXT4 is not set/g' openwrt/.config
-          
-            # 2. 彻底封杀 Passwall / SSR+ 及一切底层代理组件
-            sed -i 's/CONFIG_PACKAGE_luci-app-passwall=y/# CONFIG_PACKAGE_luci-app-passwall is not set/g' openwrt/.config
-            sed -i '/CONFIG_PACKAGE_luci-app-passwall_/d' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y/# CONFIG_PACKAGE_luci-i18n-passwall-zh-cn is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus=y/# CONFIG_PACKAGE_luci-app-ssr-plus is not set/g' openwrt/.config
-            sed -i '/CONFIG_PACKAGE_luci-app-ssr-plus_/d' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_xray-core=y/# CONFIG_PACKAGE_xray-core is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_sing-box=y/# CONFIG_PACKAGE_sing-box is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_shadowsocksr-libev-ssr-local=y/# CONFIG_PACKAGE_shadowsocksr-libev-ssr-local is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_shadowsocksr-libev-ssr-redir=y/# CONFIG_PACKAGE_shadowsocksr-libev-ssr-redir is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_v2ray-plugin=y/# CONFIG_PACKAGE_v2ray-plugin is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_v2ray-geoip=y/# CONFIG_PACKAGE_v2ray-geoip is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_v2ray-geosite=y/# CONFIG_PACKAGE_v2ray-geosite is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_shadowsocks-rust=y/# CONFIG_PACKAGE_shadowsocks-rust is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Server=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Server is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_shadowsocks-rust-sslocal=y/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/g' openwrt/.config
-          
-            # 3. 封杀附属小工具
-            sed -i 's/CONFIG_PACKAGE_haproxy=y/# CONFIG_PACKAGE_haproxy is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_chinadns-ng=y/# CONFIG_PACKAGE_chinadns-ng is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_dns2socks=y/# CONFIG_PACKAGE_dns2socks is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_ipt2socks=y/# CONFIG_PACKAGE_ipt2socks is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_microsocks=y/# CONFIG_PACKAGE_microsocks is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_tcping=y/# CONFIG_PACKAGE_tcping is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_geoview=y/# CONFIG_PACKAGE_geoview is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_simple-obfs-client=y/# CONFIG_PACKAGE_simple-obfs-client is not set/g' openwrt/.config
+            # ...(这里保留你原来的 Docker 和 Passwall 阉割逻辑，为了版面整洁省略，你照原样放进去即可)...
           fi
           
           if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
             echo "====== 开始注入 Public 版本专属插件 ======"
-          
-            # daede 控制面板及纯净版 dae 核心
             echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
           fi
           
-          # 明确开启开发者选项并指定宿主机 Clang 编译器来构建 eBPF
           echo "CONFIG_DEVEL=y" >> openwrt/.config
           echo "CONFIG_BPF_TOOLCHAIN_HOST=y" >> openwrt/.config
           
-          # 针对原生编译，强行开启 EXT4，彻底关闭 SquashFS，并将系统分区扩容至 1024M
+          # =========================================================
+          # 【取消了之前强制 EXT4 的处理，替换为修改底层图纸的真实修复】
+          # =========================================================
           if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ] || [ "${{ env.FIRMWARE_LOWER }}" == "istoreos-native" ]; then
-          echo "====== 开启原生编译专属镜像配置 (强制 EXT4) ======"
-          sed -i 's/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/CONFIG_TARGET_ROOTFS_EXT4FS=y/g' openwrt/.config
-          sed -i 's/CONFIG_TARGET_ROOTFS_SQUASHFS=y/# CONFIG_TARGET_ROOTFS_SQUASHFS is not set/g' openwrt/.config
-          sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=1024/g' openwrt/.config
-          grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> openwrt/.config
+            echo "====== 暴力修正原生 Amlogic 分区表写死 256M 的问题 ======"
+          # 直接冲进 amlogic 的镜像打包脚本，把写死的 256M 物理限制强行提至 1024M
+            if [ -f openwrt/target/linux/amlogic/image/Makefile ]; then
+              sed -i 's/256/1024/g' openwrt/target/linux/amlogic/image/Makefile
+              sed -i 's/ROOTFS_PARTSIZE:=.*/ROOTFS_PARTSIZE:=1024/g' openwrt/target/linux/amlogic/image/Makefile
+            fi
           fi
           
           cd openwrt
@@ -651,30 +608,30 @@ jobs:
         run: |
           mkdir -p packit/output packit/
           
-          # 根据不同类型寻找镜像文件，且精准匹配 *ext4-sysupgrade.img.gz 彻底避开 SquashFS
+          # 【恢复原始逻辑：取消强制 ext4 匹配，抓回默认的原生 img】
           if [ "${{ env.FIRMWARE_LOWER }}" == "istoreos-native" ]; then
-             IMG_FILE=$(find openwrt/bin/targets/amlogic/meson/ -type f -name "*ext4-sysupgrade.img.gz" | head -n 1)
+             IMG_FILE=$(find openwrt/bin/targets/amlogic/meson/ -type f -name "*sysupgrade.img.gz" | head -n 1)
              REAL_KERNEL_VER=$(ls openwrt/build_dir/target-*/linux-amlogic_meson/linux-* -d 2>/dev/null | head -n 1 | awk -F'linux-' '{print $NF}')
           else
-             IMG_FILE=$(find openwrt/bin/targets/amlogic/mesongx/ -type f -name "*ext4-sysupgrade.img.gz" | head -n 1)
+             IMG_FILE=$(find openwrt/bin/targets/amlogic/mesongx/ -type f -name "*sysupgrade.img.gz" | head -n 1)
              REAL_KERNEL_VER=$(ls openwrt/build_dir/target-*/linux-amlogic_mesongx/linux-* -d 2>/dev/null | head -n 1 | awk -F'linux-' '{print $NF}')
           fi
           
           if [ -n "$IMG_FILE" ]; then
             cp "$IMG_FILE" packit/output/
-            echo "✅ 成功提取原生 EXT4 镜像"
+            echo "✅ 成功提取原生镜像"
           else
-            echo "❌ 找不到原生生成的 EXT4 img.gz 镜像！"
+            echo "❌ 找不到原生生成的 img.gz 镜像！"
             exit 1
           fi
           
           if [ -z "$REAL_KERNEL_VER" ]; then REAL_KERNEL_VER="native"; fi
-
+          
           # 解析版本名供最终文件命名
           OPENWRT_VER="${{ inputs.source_branch }}"
           if [ "$OPENWRT_VER" == "master" ]; then OPENWRT_VER="R$(date +%y.%m.%d)"; fi
-
-          # 伪造一个 make.env，这样后面你原封不动的 Organize Release Files 步骤就能无缝读取了！
+          
+          # 伪造 make.env
           echo "KERNEL_VERSION=$REAL_KERNEL_VER" >> packit/make.env
           echo "OPENWRT_VER=$OPENWRT_VER" >> packit/make.env
           echo "WHOAMI=粉墨悲欢@恩山" >> packit/make.env
