@@ -265,6 +265,33 @@ else
 fi
 
 # ==========================================
+# 1.5 OAF 翻译缺失动态修复 (带向前兼容判断)
+# ==========================================
+echo "====== 检查并修复 OAF 翻译文件 ======"
+# 全局查找 oaf.po 文件路径 (无论原作者日后目录结构怎么变都能精准命中)
+OAF_PO_FILE=$(find package/custom/ -name "oaf.po" 2>/dev/null | head -n 1)
+
+if [ -n "$OAF_PO_FILE" ] && [ -f "$OAF_PO_FILE" ]; then
+    # 兼容性判断：检测文件内是否已经存在 "/etc/fwx."
+    # 如果不存在，说明原作者还没修复，此时走我们的修复逻辑
+    if ! grep -q "/etc/fwx\." "$OAF_PO_FILE"; then
+        echo "🔧 发现 OAF 源码翻译未同步，正在动态热修复 /etc/fwx 中文显示..."
+
+        # 仅针对包含关键字的行，精准替换 /etc/oaf 为 /etc/fwx
+        # 1. 修复英文 msgid (必须带点，精确匹配底层源码)
+        sed -i '/The user.s basic data/ s|/etc/oaf\.|/etc/fwx\.|g' "$OAF_PO_FILE"
+
+        # 2. 修复中文 msgstr (翻译显示内容)
+        sed -i '/用户的基本数据/ s|/etc/oaf|/etc/fwx|g' "$OAF_PO_FILE"
+    else
+        # 如果某天原作者自己改好了，包含了 fwx，这段逻辑就会自动跳过，绝不引发冲突
+        echo "🌟 检测到 OAF 原作者已修复该翻译，自动跳过自定义修改。"
+    fi
+else
+    echo "⚠️ 未找到 oaf.po 翻译文件，跳过修复。"
+fi
+
+# ==========================================
 # 2. 本地化环境与守护脚本注入
 # ==========================================
 FILES_DIR="package/base-files/files"
