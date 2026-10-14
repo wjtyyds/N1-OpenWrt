@@ -29,7 +29,7 @@ mkdir -p package/custom
 # ==========================================
 # 0.5. 提取公共逻辑：Golang 升级
 # ==========================================
-if [[ "$FIRMWARE_TYPE" != lede* ]] && [ "$FIRMWARE_TYPE" != "istoreos" ] && [ "$BUILD_TYPE" != "personal" ]; then
+if [[ "$FIRMWARE_TYPE" != lede* ]] && [ "$BUILD_TYPE" != "personal" ]; then
     echo "【Public 编译专属】：为 OpenWrt 和 ImmortalWrt 升级 Golang 1.27..."
     rm -rf feeds/packages/lang/golang
     git clone -b 27.x --depth 1 https://github.com/sbwml/packages_lang_golang.git feeds/packages/lang/golang
@@ -250,6 +250,23 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
 
 elif [ "$FIRMWARE_TYPE" == "istoreos" ]; then
     echo "====== 开始执行 iStoreOS 专属定制 ======"
+
+    if [ "$BUILD_TYPE" != "personal" ]; then
+        echo "【Public 版本专属】：为 iStoreOS 替换高版本 Docker 引擎..."
+
+        # 针对 istoreos-25.12 分支做专门判断
+        if [[ "$SOURCE_BRANCH" == *"25.12"* ]]; then
+            IMM_PKG_BRANCH="openwrt-25.12"
+        else
+            IMM_PKG_BRANCH="master"
+        fi
+
+        echo "--- 正在从 immortalwrt/packages 的 $IMM_PKG_BRANCH 分支完整替换 Docker 组件引擎 ---"
+        rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc,docker-compose}
+        git clone -b "$IMM_PKG_BRANCH" --depth 1 https://github.com/immortalwrt/packages.git /tmp/imm_packages
+        cp -r /tmp/imm_packages/utils/{docker,dockerd,containerd,runc,docker-compose} feeds/packages/utils/ || true
+        rm -rf /tmp/imm_packages
+    fi
 
     # 1. 强力卸载 iStoreOS 自带的冲突插件与相关依赖
     istoreos_conflict_plugins=(
