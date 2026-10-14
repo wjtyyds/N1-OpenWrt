@@ -111,6 +111,12 @@ jobs:
             TARGET_BRANCH="${{ inputs.source_branch }}"
           elif [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
             REPO_URL="https://github.com/istoreos/istoreos.git"
+            # 智能补全分支前缀
+            if [[ "${{ inputs.source_branch }}" != istoreos-* ]]; then
+              TARGET_BRANCH="istoreos-${{ inputs.source_branch }}"
+            else
+              TARGET_BRANCH="${{ inputs.source_branch }}"
+            fi
             # 智能补全：如果用户只填了版本号，底层自动加上 istoreos- 前缀
             if [[ "${{ inputs.source_branch }}" != istoreos-* ]]; then
               TARGET_FEEDS="configs/feeds_istoreos-${{ inputs.source_branch }}.conf"
