@@ -29,7 +29,7 @@ mkdir -p package/custom
 # ==========================================
 # 0.5. 提取公共逻辑：Golang 升级
 # ==========================================
-if [[ "$FIRMWARE_TYPE" != lede* ]] && [ "$BUILD_TYPE" != "personal" ]; then
+if [[ "$FIRMWARE_TYPE" != lede* ]] && [ "$FIRMWARE_TYPE" != "istoreos" ] && [ "$BUILD_TYPE" != "personal" ]; then
     echo "【Public 编译专属】：为 OpenWrt 和 ImmortalWrt 升级 Golang 1.27..."
     rm -rf feeds/packages/lang/golang
     git clone -b 27.x --depth 1 https://github.com/sbwml/packages_lang_golang.git feeds/packages/lang/golang
@@ -46,7 +46,7 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     lede_conflict_plugins=(
         "adguardhome" "luci-app-adguardhome"
         "luci-app-openclash" "openclash"
-        "oaf" "kmod-oaf" "appfilter" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
+        "oaf" "kmod-oaf" "appfilter" "luci-app-oaf" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
         "lucky" "luci-app-lucky"
         "passwall" "luci-app-passwall"
         # 把 hysteria 等核心组件加进来，让系统彻底 uninstall 解除软链接
@@ -118,7 +118,7 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     immortalwrt_conflict_plugins=(
         "adguardhome" "luci-app-adguardhome"
         "luci-app-openclash" "openclash"
-        "oaf" "kmod-oaf" "appfilter" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
+        "oaf" "kmod-oaf" "appfilter" "luci-app-oaf" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
         "lucky" "luci-app-lucky"
         "passwall" "luci-app-passwall"
         "hysteria" "sing-box" "xray-core" "xray-plugin" "v2ray-geodata" "v2ray-plugin" "shadowsocks-rust" "shadowsocksr-libev"
@@ -191,7 +191,7 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     openwrt_conflict_plugins=(
         "adguardhome" "luci-app-adguardhome"
         "luci-app-openclash" "openclash"
-        "oaf" "kmod-oaf" "appfilter" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
+        "oaf" "kmod-oaf" "appfilter" "luci-app-oaf" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
         "lucky" "luci-app-lucky"
         "passwall" "luci-app-passwall"
         "hysteria" "sing-box" "xray-core" "xray-plugin" "v2ray-geodata" "v2ray-plugin" "shadowsocks-rust" "shadowsocksr-libev"
@@ -253,13 +253,14 @@ elif [ "$FIRMWARE_TYPE" == "istoreos" ]; then
 
     # 1. 强力卸载 iStoreOS 自带的冲突插件与相关依赖
     istoreos_conflict_plugins=(
-        "luci-app-passwall" "passwall"
-        "luci-app-adguardhome" "adguardhome"
+        "adguardhome" "luci-app-adguardhome"
         "luci-app-openclash" "openclash"
-        "luci-app-oaf" "openappfilter" "appfilter"
-        "luci-app-lucky" "lucky"
-        "luci-app-daed" "luci-app-dae" "dae" "daed"
+        "oaf" "kmod-oaf" "appfilter" "luci-app-oaf" "luci-app-appfilter" "openappfilter" "luci-app-openappfilter" "open-app-filter"
+        "lucky" "luci-app-lucky"
+        "passwall" "luci-app-passwall"
+        "hysteria" "sing-box" "xray-core" "xray-plugin" "v2ray-geodata" "v2ray-plugin" "shadowsocks-rust" "shadowsocksr-libev"
     )
+
     for plugin in "${istoreos_conflict_plugins[@]}"; do
         ./scripts/feeds uninstall "$plugin" || true
         rm -rf feeds/packages/*/*/"$plugin" 2>/dev/null
@@ -363,10 +364,11 @@ echo "# Firmware compiled and customized by 粉墨悲欢" >> ${FILES_DIR}/etc/pr
 # ----------------------------------------
 
 # 💡 命名为 zz_custom_setup 保证全系统最后一个执行，绝对秒杀 LEDE 祖传跑分 (传承 09 基底的防爆设计)
+# 第一部分：写入公共开头和 OAF 模块逻辑
 cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
 #!/bin/sh
 
-# 1. OAF 模块加载 (兼容 F大版本。若是 lede-native 纯原生编译，/root/oaf.ko 不会存在，此逻辑自动忽略并使用原生 kmod)
+# 1. OAF 模块加载 (兼容 F大版本。若是纯原生编译 /root/oaf.ko 不存在，此逻辑自动忽略)
 if [ -f /root/oaf.ko ]; then
     KVER=$(uname -r)
     mkdir -p /lib/modules/$KVER
@@ -375,6 +377,11 @@ if [ -f /root/oaf.ko ]; then
     echo "oaf" > /etc/modules.d/99-oaf
     modprobe oaf
 fi
+EOF
+
+# 第二部分：Sysctl 注入 (明确排除 iStoreOS)
+if [ "$FIRMWARE_TYPE" != "istoreos" ]; then
+    cat << 'EOF' >> ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
 
 # 2. 极致洁癖的 sysctl 注入
 sed -i '/net.bridge.bridge-nf-call/d' /etc/sysctl.conf
@@ -386,6 +393,11 @@ net.bridge.bridge-nf-call-ip6tables=0
 net.bridge.bridge-nf-call-arptables=0
 SYSCTL_EOF
 sysctl -p
+EOF
+fi
+
+# 第三部分：追加剩余公共逻辑与阅后即焚
+cat << 'EOF' >> ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
 
 # 3. 设置 AdGuardHome 标准路径
 uci set AdGuardHome.AdGuardHome.binpath='/usr/bin/AdGuardHome/AdGuardHome' 2>/dev/null
@@ -399,6 +411,9 @@ sed -i '/coremark/d' /etc/crontabs/root 2>/dev/null
 # 脚本使命完成，自毁
 rm -f /etc/uci-defaults/zz_custom_setup
 EOF
+
+# 赋予执行权限
+chmod +x ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
 
 # 【核心修正】：废除 lede-native 针对 443 端口的补丁
 if [ "$FIRMWARE_TYPE" == "lede" ]; then
