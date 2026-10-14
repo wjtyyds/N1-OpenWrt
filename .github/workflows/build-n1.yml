@@ -148,24 +148,25 @@ jobs:
       - name: Update & Install Feeds
         run: |
           if [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
-          # 智能补全：如果用户只填了版本号，底层自动加上 istoreos- 前缀
-          if [[ "${{ inputs.source_branch }}" != istoreos-* ]]; then
-            TARGET_FEEDS="configs/feeds_istoreos-${{ inputs.source_branch }}.conf"
-          else
-            TARGET_FEEDS="configs/feeds_${{ inputs.source_branch }}.conf"
-          fi
-          
-          # 兜底的通用 feeds 配置文件
-          DEFAULT_FEEDS="configs/feeds_istoreos.conf"
-          
-          if [ -f "$TARGET_FEEDS" ]; then
-            echo "====== 匹配到分支专属 feeds 配置，开始注入: $TARGET_FEEDS ======"
-            cp "$TARGET_FEEDS" openwrt/feeds.conf
-          elif [ -f "$DEFAULT_FEEDS" ]; then
-            echo "====== 未匹配到专属文件，使用兜底 feeds 配置: $DEFAULT_FEEDS ======"
-            cp "$DEFAULT_FEEDS" openwrt/feeds.conf
-          else
-            echo "====== 未找到任何自定义 feeds 配置，保持源码默认状态 ======"
+            # 智能补全：如果用户只填了版本号，底层自动加上 istoreos- 前缀
+            if [[ "${{ inputs.source_branch }}" != istoreos-* ]]; then
+              TARGET_FEEDS="configs/feeds_istoreos-${{ inputs.source_branch }}.conf"
+            else
+              TARGET_FEEDS="configs/feeds_${{ inputs.source_branch }}.conf"
+            fi
+            
+            # 兜底的通用 feeds 配置文件
+            DEFAULT_FEEDS="configs/feeds_istoreos.conf"
+            
+            if [ -f "$TARGET_FEEDS" ]; then
+              echo "====== 匹配到分支专属 feeds 配置，开始注入: $TARGET_FEEDS ======"
+              cp "$TARGET_FEEDS" openwrt/feeds.conf
+            elif [ -f "$DEFAULT_FEEDS" ]; then
+              echo "====== 未匹配到专属文件，使用兜底 feeds 配置: $DEFAULT_FEEDS ======"
+              cp "$DEFAULT_FEEDS" openwrt/feeds.conf
+            else
+              echo "====== 未找到任何自定义 feeds 配置，保持源码默认状态 ======"
+            fi
           fi
           
           cd openwrt
