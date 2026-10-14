@@ -1,6 +1,5 @@
 name: Build N1 Firmware
-run-name: "📦 ${{ inputs.firmware_type }}-${{ inputs.source_branch }} ${{ inputs.firmware_type != 'Lede-Native' && inputs.firmware_type != 'istoreos' && format('| Kernel {0}-{1} ', inputs.kernel_version, inputs.kernel_builder == 'kernel_stable' && 'stable' || 'flippy') || '' }}| ${{ inputs.build_type }}"
-
+run-name: "📦 ${{ inputs.firmware_type }}-${{ inputs.source_branch }} ${{ inputs.firmware_type != 'Lede-Native' && inputs.firmware_type != 'iStoreOS' && format('| Kernel {0}-{1} ', inputs.kernel_version, inputs.kernel_builder == 'kernel_stable' && 'stable' || 'flippy') || '' }}| ${{ inputs.build_type }}"
 on:
   workflow_dispatch:
     inputs:
@@ -112,7 +111,12 @@ jobs:
             TARGET_BRANCH="${{ inputs.source_branch }}"
           elif [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
             REPO_URL="https://github.com/istoreos/istoreos.git"
-            TARGET_BRANCH="${{ inputs.source_branch }}"
+            # 智能补全：如果用户只填了版本号，底层自动加上 istoreos- 前缀
+            if [[ "${{ inputs.source_branch }}" != istoreos-* ]]; then
+              TARGET_FEEDS="configs/feeds_istoreos-${{ inputs.source_branch }}.conf"
+            else
+              TARGET_FEEDS="configs/feeds_${{ inputs.source_branch }}.conf"
+            fi
           elif [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
             REPO_URL="https://github.com/coolsnowwolf/lede"
             if [[ "${{ inputs.source_branch }}" =~ ^R([0-9]{2})\.([0-9]{2})\.([0-9]{2})$ ]]; then
