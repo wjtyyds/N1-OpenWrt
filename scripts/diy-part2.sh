@@ -249,9 +249,11 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
     bash add_turboacc.sh --no-sfe
 fi
 
+# ==========================================
+# public 公共版：追加拉取 daede 等组件
+# ==========================================
 if [ "$BUILD_TYPE" == "public" ]; then
     echo "【公共版】：已配置拉取完整编译组件..."
-
     echo "【清理冲突插件】：删除源码自带的 dae/daed..."
     rm -rf feeds/luci/applications/luci-app-dae
     rm -rf feeds/luci/applications/luci-app-daed
@@ -270,7 +272,6 @@ fi
 echo "====== 检查并修复 OAF 翻译文件 ======"
 # 全局查找 oaf.po 文件路径 (无论原作者日后目录结构怎么变都能精准命中)
 OAF_PO_FILE=$(find package/custom/ -name "oaf.po" 2>/dev/null | head -n 1)
-
 if [ -n "$OAF_PO_FILE" ] && [ -f "$OAF_PO_FILE" ]; then
     # 兼容性判断：检测文件内是否已经存在 "/etc/fwx."
     # 如果不存在，说明原作者还没修复，此时走我们的修复逻辑
@@ -308,7 +309,7 @@ echo "# Firmware compiled and customized by 粉墨悲欢" >> ${FILES_DIR}/etc/pr
 cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
 #!/bin/sh
 
-# 1. OAF 模块加载
+# 1. OAF 模块加载 (兼容 F大版本。若是 lede-native 纯原生编译，/root/oaf.ko 不会存在，此逻辑自动忽略并使用原生 kmod)
 if [ -f /root/oaf.ko ]; then
     KVER=$(uname -r)
     mkdir -p /lib/modules/$KVER
@@ -334,7 +335,7 @@ uci set AdGuardHome.AdGuardHome.binpath='/usr/bin/AdGuardHome/AdGuardHome' 2>/de
 uci set AdGuardHome.AdGuardHome.workdir='/usr/bin/AdGuardHome' 2>/dev/null
 uci commit AdGuardHome 2>/dev/null
 
-# 4. 彻底清理 LEDE 祖传的跑分计划任务 (全网最稳的末位清理法)
+# 4. 彻底清理 LEDE 祖传的跑分计划任务
 sed -i '/coremark/d' /etc/crontabs/root 2>/dev/null
 /etc/init.d/cron restart 2>/dev/null
 
@@ -342,7 +343,8 @@ sed -i '/coremark/d' /etc/crontabs/root 2>/dev/null
 rm -f /etc/uci-defaults/zz_custom_setup
 EOF
 
-if [[ "$FIRMWARE_TYPE" == lede* ]]; then
+# 【核心修正】：废除 lede-native 针对 443 端口的补丁
+if [ "$FIRMWARE_TYPE" == "lede" ]; then
     cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/98_lede_setup
 #!/bin/sh
 uci delete uhttpd.main.listen_https 2>/dev/null
@@ -387,10 +389,4 @@ rm -f /etc/uci-defaults/97_personal_setup
 EOF
 fi
 
-# ==========================================
-# 针对 Lede 原生编译的专属补丁注入
-# ==========================================
-if [ "$FIRMWARE_TYPE" == "lede-native" ]; then
-    echo "【原生编译专属】：打上 N1 eMMC 分区扩容补丁..."
-    patch -p1 < $GITHUB_WORKSPACE/patches/custom_target_amlogic_scripts.patch
-fi
+# 【注】：原先在此处的 N1 eMMC 分区扩容 patch (custom_target_amlogic_scripts.patch) 已经彻底废除，全面交由 LEDE 原生代码处理。

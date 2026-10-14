@@ -173,7 +173,7 @@ jobs:
       - name: Load Configuration
         run: |
           CONF_NAME="${{ env.FIRMWARE_LOWER }}"
-          if [ "$CONF_NAME" == "lede-native" ]; then CONF_NAME="lede"; fi
+          if [ "$CONF_NAME" == "lede-native" ]; then CONF_NAME="lede-native"; fi
           cp configs/${CONF_NAME}.config openwrt/.config
           
           # 强制关闭 Debug
@@ -185,9 +185,51 @@ jobs:
           sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client is not set/g' openwrt/.config
           sed -i 's/CONFIG_PACKAGE_shadowsocks-rust-sslocal=y/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/g' openwrt/.config
           
+          # =========================================================
+          # 【Lede-Native 白纸精准注入】：严格复刻你旧版 lede.config
+          # =========================================================
+          if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
+            echo "====== 开始向 Lede-Native 白纸注入选定插件 ======"
+          
+            # 1. 你保留的 LEDE 原生组件
+            echo "CONFIG_PACKAGE_luci-app-diskman=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-diskman_INCLUDE_lsblk=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-oui=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-package-manager=y" >> openwrt/.config
+          
+            # 2. 定制拉取源码的组件
+            echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-lucky=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-openclash=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
+
+            if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
+              # Public 版专属
+              echo "CONFIG_PACKAGE_luci-app-dockerman=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
+
+              # Passwall 及其精确的附加组件 (对照旧版配置)
+              echo "CONFIG_PACKAGE_luci-app-passwall=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Geoview=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Haproxy=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Hysteria=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_ShadowsocksR_Libev_Client=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_SingBox=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Geodata=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Plugin=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=y" >> openwrt/.config
+            fi
+          fi
+
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
             echo "====== 开始注入 Personal 版本专属强效断根指令 ======"
-            # 1. 明确禁止 Docker 及其所有底层组件的编译 (防死灰复燃)
+            # 1. 明确禁止 Docker 及其所有底层组件的编译
             sed -i 's/CONFIG_PACKAGE_luci-app-dockerman=y/# CONFIG_PACKAGE_luci-app-dockerman is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_luci-lib-docker=y/# CONFIG_PACKAGE_luci-lib-docker is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_docker=y/# CONFIG_PACKAGE_docker is not set/g' openwrt/.config
@@ -227,7 +269,7 @@ jobs:
             sed -i 's/CONFIG_PACKAGE_simple-obfs-client=y/# CONFIG_PACKAGE_simple-obfs-client is not set/g' openwrt/.config
           fi
           
-          if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
+          if [ "${{ env.BUILD_LOWER }}" == "public" ] && [ "${{ env.FIRMWARE_LOWER }}" != "lede-native" ]; then
             echo "====== 开始注入 Public 版本专属插件 ======"
             echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
@@ -237,22 +279,20 @@ jobs:
           echo "CONFIG_BPF_TOOLCHAIN_HOST=y" >> openwrt/.config
           
           # =========================================================
-          # 【我全都要】：砸碎 256M 物理限制 + 强开 EXT4 与 SQUASHFS
+          # 【我全都要】：砸碎 256M 物理限制 + 强开 EXT4
           # =========================================================
           if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ] || [ "${{ env.FIRMWARE_LOWER }}" == "istoreos-native" ]; then
-            echo "====== 修正 Amlogic 分区锁，并强迫生成双格式镜像 ======"
+            echo "====== 修正 Amlogic 分区锁，并强迫生成指定格式镜像 ======"
             # 1. 砸碎 Makefile 里的 256M 物理锁，统一扩容到 1024M
             if [ -f openwrt/target/linux/amlogic/image/Makefile ]; then
               sed -i 's/256/1024/g' openwrt/target/linux/amlogic/image/Makefile
               sed -i 's/ROOTFS_PARTSIZE:=.*/ROOTFS_PARTSIZE:=1024/g' openwrt/target/linux/amlogic/image/Makefile
             fi
           
-            # 2. 修改 .config，把 EXT4 和 SquashFS 全都打开！
+            # 2. 修改 .config，强制打开 EXT4 和 GZIP
             sed -i 's/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/CONFIG_TARGET_ROOTFS_EXT4FS=y/g' openwrt/.config
             grep -q "CONFIG_TARGET_ROOTFS_EXT4FS=y" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_EXT4FS=y" >> openwrt/.config
-          
-            sed -i 's/# CONFIG_TARGET_ROOTFS_SQUASHFS is not set/CONFIG_TARGET_ROOTFS_SQUASHFS=y/g' openwrt/.config
-            grep -q "CONFIG_TARGET_ROOTFS_SQUASHFS=y" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_SQUASHFS=y" >> openwrt/.config
+            grep -q "CONFIG_TARGET_IMAGES_GZIP=y" openwrt/.config || echo "CONFIG_TARGET_IMAGES_GZIP=y" >> openwrt/.config
           
             # 3. 强行设定体积为 1024M
             sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=1024/g' openwrt/.config
@@ -266,12 +306,9 @@ jobs:
           # 【锁定配置】：防止 defconfig 偷偷覆盖
           # =========================================================
           if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
-            echo "====== 锁定 EXT4 与 SQUASHFS 双重配置 ======"
+            echo "====== 锁定 EXT4 配置 ======"
             sed -i 's/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/CONFIG_TARGET_ROOTFS_EXT4FS=y/g' .config
             grep -q "CONFIG_TARGET_ROOTFS_EXT4FS=y" .config || echo "CONFIG_TARGET_ROOTFS_EXT4FS=y" >> .config
-          
-            sed -i 's/# CONFIG_TARGET_ROOTFS_SQUASHFS is not set/CONFIG_TARGET_ROOTFS_SQUASHFS=y/g' .config
-            grep -q "CONFIG_TARGET_ROOTFS_SQUASHFS=y" .config || echo "CONFIG_TARGET_ROOTFS_SQUASHFS=y" >> .config
           
             sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=1024/g' .config
             grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" .config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> .config
@@ -354,8 +391,7 @@ jobs:
               fi
           fi
           
-          echo "注入你原先的启动和伪装脚本..."
-          # 提取你的 n1_boot_check 核心逻辑
+          echo "注入 AdGuardHome 引导脚本..."
           cat << 'EOF' > $BASE_FILES/etc/init.d/n1_boot_check
           #!/bin/sh /etc/rc.common
           START=99
@@ -399,8 +435,6 @@ jobs:
           cat << 'EOF' > $BASE_FILES/etc/rc.local
           # Put your custom commands here that should be executed once
           # the system init finished. By default this file does nothing.
-          
-          /usr/sbin/balethirq.pl
           exit 0
           EOF
           chmod +x $BASE_FILES/etc/rc.local
@@ -578,13 +612,11 @@ jobs:
           cat << 'EOF' > inject_tmp/etc/init.d/n1_boot_check
           #!/bin/sh /etc/rc.common
           START=99
-          
           start() {
               (
                   sleep 5
                   ROOT_DEV=$(df -h / | tail -n1 | awk '{print $1}')
                   IS_EMMC=0
-          
                   if echo "$ROOT_DEV" | grep -q "mmcblk"; then
                       IS_EMMC=1
                   fi
@@ -648,17 +680,6 @@ jobs:
           sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
           cd ..
           
-          # 💡 [去重] 强行修复可能重复的 balethirq.pl 逻辑
-          mkdir -p /tmp/rc_fix
-          cd /tmp/rc_fix
-          sudo tar -xf $GITHUB_WORKSPACE/packit/openwrt-armvirt-64-default-rootfs.tar etc/rc.local || true
-          if [ -f etc/rc.local ]; then
-              sudo sed -i '/balethirq.pl/d' etc/rc.local
-              sudo sed -i '/exit 0/i \/usr\/sbin\/balethirq.pl' etc/rc.local
-              sudo tar -rvf $GITHUB_WORKSPACE/packit/openwrt-armvirt-64-default-rootfs.tar etc/rc.local > /dev/null 2>&1
-          fi
-          
-          cd $GITHUB_WORKSPACE/packit
           sudo gzip -9 ./openwrt-armvirt-64-default-rootfs.tar
           
           sudo chmod +x mk_s905d_n1.sh
@@ -671,7 +692,6 @@ jobs:
         run: |
           mkdir -p packit/output packit/
           
-          # 【我全都要】：直接寻找所有包含 sysupgrade.img.gz 的镜像，并且全部复制！
           if [ "${{ env.FIRMWARE_LOWER }}" == "istoreos-native" ]; then
              TARGET_DIR="openwrt/bin/targets/amlogic/meson/"
              REAL_KERNEL_VER=$(ls openwrt/build_dir/target-*/linux-amlogic_meson/linux-* -d 2>/dev/null | head -n 1 | awk -F'linux-' '{print $NF}')
@@ -680,8 +700,8 @@ jobs:
              REAL_KERNEL_VER=$(ls openwrt/build_dir/target-*/linux-amlogic_mesongx/linux-* -d 2>/dev/null | head -n 1 | awk -F'linux-' '{print $NF}')
           fi
           
-          # 查找该目录下所有的系统镜像文件
-          IMG_FILES=$(find "$TARGET_DIR" -type f -name "*sysupgrade.img.gz")
+          # 【修改点】：直接查找原生生成的 *.img.gz 镜像，不限定 sysupgrade 后缀
+          IMG_FILES=$(find "$TARGET_DIR" -type f -name "*.img.gz")
           
           if [ -n "$IMG_FILES" ]; then
             for img in $IMG_FILES; do
@@ -710,13 +730,10 @@ jobs:
           ZIP_PASS: ${{ secrets.ZIP_PASS }}
         run: |
           mkdir release_files
-          
           source packit/make.env
-          
           DATETIME=$(date +'%Y%m%d%H%M')
           
           for img in packit/output/*.img.gz; do
-            # 提取原文件名中的格式类型 (ext4 或 squashfs 或 sfs)
             ORIG_NAME=$(basename "$img")
             FORMAT_SUFFIX=""
             if echo "$ORIG_NAME" | grep -q "ext4"; then
