@@ -14,7 +14,7 @@ on:
           - ImmortalWrt
           - Lede
           - Lede-Native
-          - istoreos
+          - iStoreOS
       build_type:
         description: '编译目标'
         required: true
