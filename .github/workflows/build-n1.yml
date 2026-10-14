@@ -1,5 +1,5 @@
 name: Build N1 Firmware
-run-name: "📦 ${{ inputs.firmware_type }} ${{ inputs.source_branch }} ${{ inputs.firmware_type != 'Lede-Native' && format('| Kernel {0}-{1} ', inputs.kernel_version, inputs.kernel_builder == 'kernel_stable' && 'stable' || 'flippy') || '' }}| ${{ inputs.build_type }}"
+run-name: "📦 ${{ inputs.firmware_type }}-${{ inputs.source_branch }} ${{ inputs.firmware_type != 'Lede-Native' && inputs.firmware_type != 'istoreos' && format('| Kernel {0}-{1} ', inputs.kernel_version, inputs.kernel_builder == 'kernel_stable' && 'stable' || 'flippy') || '' }}| ${{ inputs.build_type }}"
 
 on:
   workflow_dispatch:
@@ -14,6 +14,7 @@ on:
           - ImmortalWrt
           - Lede
           - Lede-Native
+          - istoreos
       build_type:
         description: '编译目标'
         required: true
@@ -27,11 +28,11 @@ on:
         required: true
         default: 'v25.12.5'
       kernel_version:
-        description: '打包内核版本 (注：若是 Lede-Native 原生编译则无需理会此项)'
+        description: '打包内核版本 (注：若是原生编译则无需理会此项)'
         required: true
-        default: '6.18.55'
+        default: '6.18.56'
       kernel_builder:
-        description: '选择内核分支 (注：若是 Lede-Native 原生编译则无需理会此项)'
+        description: '选择内核分支 (注：若是原生编译则无需理会此项)'
         required: true
         default: 'kernel_flippy'
         type: choice
@@ -96,9 +97,7 @@ jobs:
           
           sudo timedatectl set-timezone "Asia/Shanghai"
           
-          # 新增：记录流水线刚启动时的日期，用于 Release Tag
           echo "START_DATE=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
-          
           echo "✅ 环境安装完毕！"
 
       - name: Clone Source Code
@@ -111,29 +110,21 @@ jobs:
           elif [ "${{ env.FIRMWARE_LOWER }}" == "immortalwrt" ]; then
             REPO_URL="https://github.com/immortalwrt/immortalwrt"
             TARGET_BRANCH="${{ inputs.source_branch }}"
+          elif [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
+            REPO_URL="https://github.com/istoreos/istoreos.git"
+            TARGET_BRANCH="${{ inputs.source_branch }}"
           elif [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
             REPO_URL="https://github.com/coolsnowwolf/lede"
-          
-            # 【核心逻辑】拦截 Rxx.xx.xx 并转换为 API 时间戳查询 Commit
             if [[ "${{ inputs.source_branch }}" =~ ^R([0-9]{2})\.([0-9]{2})\.([0-9]{2})$ ]]; then
               YEAR="20${BASH_REMATCH[1]}"
               MONTH="${BASH_REMATCH[2]}"
               DAY="${BASH_REMATCH[3]}"
               TARGET_DATE="${YEAR}-${MONTH}-${DAY}T23:59:59Z"
-              echo "🔍 检测到 LEDE 专属日期版本: R${BASH_REMATCH[1]}.${MONTH}.${DAY}"
-              echo "⏳ 正在通过 GitHub API 检索该日期（${TARGET_DATE}）前的最新提交..."
-          
               API_URL="https://api.github.com/repos/coolsnowwolf/lede/commits?until=$TARGET_DATE&per_page=1"
               API_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$API_URL")
               TARGET_BRANCH=$(echo "$API_RESP" | jq -r '.[0].sha' 2>/dev/null)
-          
               if [ "$TARGET_BRANCH" == "null" ] || [ -z "$TARGET_BRANCH" ]; then
-                echo "❌ 获取 LEDE 哈希失败！API 响应详情："
-                echo "$API_RESP" | head -n 15
-                echo "⚠️ 回退拉取 master 分支"
                 TARGET_BRANCH="master"
-              else
-                echo "✅ 成功获取对应日期最新的哈希值: $TARGET_BRANCH"
               fi
             else
               TARGET_BRANCH="${{ inputs.source_branch }}"
@@ -144,7 +135,6 @@ jobs:
           mkdir openwrt && cd openwrt
           git init
           git remote add origin $REPO_URL
-          
           git fetch --depth 1 origin "$TARGET_BRANCH"
           git checkout FETCH_HEAD
           
@@ -153,6 +143,23 @@ jobs:
 
       - name: Update & Install Feeds
         run: |
+          if [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
+            # 优先寻找匹配当前分支名的 feeds 配置文件
+            TARGET_FEEDS="configs/feeds_${{ inputs.source_branch }}.conf"
+            # 兜底的通用 feeds 配置文件
+            DEFAULT_FEEDS="configs/feeds_istoreos.conf"
+          
+            if [ -f "$TARGET_FEEDS" ]; then
+              echo "====== 匹配到分支专属 feeds 配置，开始注入: $TARGET_FEEDS ======"
+              cp "$TARGET_FEEDS" openwrt/feeds.conf
+            elif [ -f "$DEFAULT_FEEDS" ]; then
+              echo "====== 未匹配到专属文件，使用兜底 feeds 配置: $DEFAULT_FEEDS ======"
+              cp "$DEFAULT_FEEDS" openwrt/feeds.conf
+            else
+              echo "====== 未找到任何自定义 feeds 配置，保持源码默认状态 ======"
+            fi
+          fi
+          
           cd openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a -f < /dev/null
@@ -176,28 +183,19 @@ jobs:
           if [ "$CONF_NAME" == "lede-native" ]; then CONF_NAME="lede-native"; fi
           cp configs/${CONF_NAME}.config openwrt/.config
           
-          # 强制关闭 Debug
           sed -i 's/CONFIG_KERNEL_DEBUG_INFO=y/# CONFIG_KERNEL_DEBUG_INFO is not set/g' openwrt/.config
           sed -i 's/CONFIG_KERNEL_DEBUG_KERNEL=y/# CONFIG_KERNEL_DEBUG_KERNEL is not set/g' openwrt/.config
           sed -i 's/CONFIG_GDB=y/# CONFIG_GDB is not set/g' openwrt/.config
           
-          # 防爆盘
           sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client is not set/g' openwrt/.config
           sed -i 's/CONFIG_PACKAGE_shadowsocks-rust-sslocal=y/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/g' openwrt/.config
           
-          # =========================================================
-          # 【Lede-Native 白纸精准注入】：严格复刻你旧版 lede.config
-          # =========================================================
           if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
             echo "====== 开始向 Lede-Native 白纸注入选定插件 ======"
-          
-            # 1. 你保留的 LEDE 原生组件
             echo "CONFIG_PACKAGE_luci-app-diskman=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_luci-app-diskman_INCLUDE_lsblk=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_luci-app-oui=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_luci-app-package-manager=y" >> openwrt/.config
-          
-            # 2. 定制拉取源码的组件
             echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
@@ -206,12 +204,9 @@ jobs:
             echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
 
             if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
-              # Public 版专属
               echo "CONFIG_PACKAGE_luci-app-dockerman=y" >> openwrt/.config
               echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
               echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
-
-              # Passwall 及其精确的附加组件 (对照旧版配置)
               echo "CONFIG_PACKAGE_luci-app-passwall=y" >> openwrt/.config
               echo "CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy=y" >> openwrt/.config
               echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Geoview=y" >> openwrt/.config
@@ -229,7 +224,6 @@ jobs:
 
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
             echo "====== 开始注入 Personal 版本专属强效断根指令 ======"
-            # 1. 明确禁止 Docker 及其所有底层组件的编译
             sed -i 's/CONFIG_PACKAGE_luci-app-dockerman=y/# CONFIG_PACKAGE_luci-app-dockerman is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_luci-lib-docker=y/# CONFIG_PACKAGE_luci-lib-docker is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_docker=y/# CONFIG_PACKAGE_docker is not set/g' openwrt/.config
@@ -240,7 +234,6 @@ jobs:
             sed -i 's/CONFIG_DOCKER_NET_MACVLAN=y/# CONFIG_DOCKER_NET_MACVLAN is not set/g' openwrt/.config
             sed -i 's/CONFIG_DOCKER_STO_EXT4=y/# CONFIG_DOCKER_STO_EXT4 is not set/g' openwrt/.config
           
-            # 2. 彻底封杀 Passwall / SSR+ 及一切底层代理组件
             sed -i 's/CONFIG_PACKAGE_luci-app-passwall=y/# CONFIG_PACKAGE_luci-app-passwall is not set/g' openwrt/.config
             sed -i '/CONFIG_PACKAGE_luci-app-passwall_/d' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y/# CONFIG_PACKAGE_luci-i18n-passwall-zh-cn is not set/g' openwrt/.config
@@ -258,7 +251,6 @@ jobs:
             sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_shadowsocks-rust-sslocal=y/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/g' openwrt/.config
           
-            # 3. 封杀附属小工具
             sed -i 's/CONFIG_PACKAGE_haproxy=y/# CONFIG_PACKAGE_haproxy is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_chinadns-ng=y/# CONFIG_PACKAGE_chinadns-ng is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_dns2socks=y/# CONFIG_PACKAGE_dns2socks is not set/g' openwrt/.config
@@ -270,7 +262,6 @@ jobs:
           fi
           
           if [ "${{ env.BUILD_LOWER }}" == "public" ] && [ "${{ env.FIRMWARE_LOWER }}" != "lede-native" ]; then
-            echo "====== 开始注入 Public 版本专属插件 ======"
             echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
           fi
@@ -278,51 +269,72 @@ jobs:
           echo "CONFIG_DEVEL=y" >> openwrt/.config
           echo "CONFIG_BPF_TOOLCHAIN_HOST=y" >> openwrt/.config
           
-          # =========================================================
-          # 【我全都要】：砸碎 256M 物理限制 + 强开 EXT4
-          # =========================================================
-          if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ] || [ "${{ env.FIRMWARE_LOWER }}" == "istoreos-native" ]; then
+          if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
             echo "====== 修正 Amlogic 分区锁，并强迫生成指定格式镜像 ======"
-            # 1. 砸碎 Makefile 里的 256M 物理锁，统一扩容到 1024M
             if [ -f openwrt/target/linux/amlogic/image/Makefile ]; then
               sed -i 's/256/1024/g' openwrt/target/linux/amlogic/image/Makefile
               sed -i 's/ROOTFS_PARTSIZE:=.*/ROOTFS_PARTSIZE:=1024/g' openwrt/target/linux/amlogic/image/Makefile
             fi
           
-            # 2. 修改 .config，强制打开 EXT4 和 GZIP
             sed -i 's/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/CONFIG_TARGET_ROOTFS_EXT4FS=y/g' openwrt/.config
             grep -q "CONFIG_TARGET_ROOTFS_EXT4FS=y" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_EXT4FS=y" >> openwrt/.config
             grep -q "CONFIG_TARGET_IMAGES_GZIP=y" openwrt/.config || echo "CONFIG_TARGET_IMAGES_GZIP=y" >> openwrt/.config
           
-            # 3. 强行设定体积为 1024M
+            sed -i 's/CONFIG_TARGET_ROOTFS_SQUASHFS=y/# CONFIG_TARGET_ROOTFS_SQUASHFS is not set/g' openwrt/.config
+          
             sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=1024/g' openwrt/.config
             grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> openwrt/.config
+          fi
+          
+          if [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
+            echo "====== 开始向 iStoreOS 写入定制插件配置 ======"
+          
+            # 基础定制应用
+            echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-lucky=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-openclash=y" >> openwrt/.config
+
+            if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
+              # Public 专属科学与面板
+              echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
+          
+              # Passwall 及其底层组件精确勾选
+              echo "CONFIG_PACKAGE_luci-app-passwall=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Geoview=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Haproxy=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Hysteria=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_ShadowsocksR_Libev_Client=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_SingBox=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Geodata=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Plugin=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=y" >> openwrt/.config
+            fi
           fi
           
           cd openwrt
           make defconfig
           
-          # =========================================================
-          # 【锁定配置】：防止 defconfig 偷偷覆盖
-          # =========================================================
           if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
             echo "====== 锁定 EXT4 配置 ======"
             sed -i 's/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/CONFIG_TARGET_ROOTFS_EXT4FS=y/g' .config
             grep -q "CONFIG_TARGET_ROOTFS_EXT4FS=y" .config || echo "CONFIG_TARGET_ROOTFS_EXT4FS=y" >> .config
-          
             sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=1024/g' .config
             grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" .config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> .config
           fi
 
       - name: Inject Binaries & Configs (原生编译前置注入)
-        if: env.FIRMWARE_LOWER == 'lede-native'
+        if: env.FIRMWARE_LOWER == 'lede-native' || env.FIRMWARE_LOWER == 'istoreos'
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_TOKEN }}
           PRIVATE_REPO: ${{ secrets.PRIVATE_REPO }}
           BUILD_LOWER: ${{ env.BUILD_LOWER }}
         run: |
           echo "====== 原生编译：前置注入最新内核与私密配置 ======"
-          # 创建编译系统能直接识别的 base-files 目录
           BASE_FILES="openwrt/package/base-files/files"
           mkdir -p $BASE_FILES/usr/lib/adg_core
           mkdir -p $BASE_FILES/usr/bin
@@ -341,9 +353,7 @@ jobs:
           fi
           
           echo "提取 Lucky 并进行源码级劫持..."
-          # 1. 创建一个不会引起冲突的独立暂存区
           mkdir -p openwrt/custom_bins
-          
           if [ "$BUILD_LOWER" == "public" ]; then
             LUCKY_FILE="lucky_2.27.2_Linux_arm64_wanji_docker.tar.gz"
           else
@@ -356,15 +366,9 @@ jobs:
           
           if [ -f "$LUCKY_FILE" ]; then
             tar -xzf "$LUCKY_FILE" -C /tmp/
-          
-            # 【核心改动 1】不要放进 base-files 抢坑位，放在外面的暂存区
             mv $(find /tmp/ -type f -name "lucky" | head -n 1) openwrt/custom_bins/lucky
             chmod 755 openwrt/custom_bins/lucky
-          
-            # 【核心改动 2：神来之笔】利用正则，动态修改 lucky 插件源码的 Makefile
-            # 把原本要去打包旧核心的指令，强制重定向到我们刚才暂存的最新私有核心上！
             sed -i 's|$(PKG_BUILD_DIR)[^ ]*lucky|$(TOPDIR)/custom_bins/lucky|g' openwrt/package/custom/lucky/lucky/Makefile
-            echo "✅ 成功从源码层面劫持 Lucky 核心"
           fi
           
           echo "提取 OpenClash Meta..."
@@ -446,7 +450,7 @@ jobs:
           make -j$(nproc) || make -j1 || make -j1 V=s
 
       - name: Package Firmware & Inject Private Mods
-        if: env.FIRMWARE_LOWER != 'lede-native'
+        if: env.FIRMWARE_LOWER != 'lede-native' && env.FIRMWARE_LOWER != 'istoreos'
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_TOKEN }}
           PRIVATE_REPO: ${{ secrets.PRIVATE_REPO }}
@@ -485,18 +489,13 @@ jobs:
           ROOTFS_FILE=$(find ../openwrt/bin/targets/ -type f -name "*-rootfs.tar.gz" | head -n 1)
           sudo mv "$ROOTFS_FILE" ./openwrt-armvirt-64-default-rootfs.tar.gz
           
-          # 创建准备注入的目录
           mkdir -p inject_tmp/root inject_tmp/etc inject_tmp/usr/lib/adg_core inject_tmp/etc/init.d inject_tmp/etc/rc.d
           
-          # ----------------------------------------------------
-          # 1. 提取官方最新 AdGuardHome 放入系统深处隐藏备用 (弹药库)
-          # ----------------------------------------------------
           echo "获取 AdGuardHome 最新稳定版..."
           AGH_API="https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest"
           AGH_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$AGH_API")
           AGH_URL=$(echo "$AGH_RESP" | grep "browser_download_url" | grep "linux_arm64.tar.gz" | head -n 1 | cut -d '"' -f 4)
           if [ -n "$AGH_URL" ]; then
-              echo "✅ 成功解析到 AdGuardHome 地址: $AGH_URL"
               wget -qO /tmp/agh.tar.gz "$AGH_URL"
               mkdir -p /tmp/agh_extract
               tar -xzf /tmp/agh.tar.gz -C /tmp/agh_extract
@@ -505,14 +504,8 @@ jobs:
                   mv "$AGH_BIN" inject_tmp/usr/lib/adg_core/AdGuardHome
                   chmod 755 inject_tmp/usr/lib/adg_core/AdGuardHome
               fi
-          else
-              echo "❌ 解析 AdGuardHome 下载链接失败！API 返回内容如下："
-              echo "$AGH_RESP" | head -n 15
           fi
           
-          # ----------------------------------------------------
-          # 2. 从 Private-Configs 提取 Lucky 并直接物理追加
-          # ----------------------------------------------------
           echo "从私有库获取 Lucky 核心..."
           if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
               LUCKY_FILE="lucky_2.27.2_Linux_arm64_wanji_docker.tar.gz"
@@ -529,19 +522,13 @@ jobs:
               tar -xzf "$LUCKY_FILE" -C /tmp/lucky_extract
               LUCKY_BIN=$(find /tmp/lucky_extract -type f -name "lucky" | head -n 1)
               if [ -n "$LUCKY_BIN" ]; then
-                  # 物理删除原生 Lucky (防止旧版本占用)
                   sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar usr/bin/lucky ./usr/bin/lucky 2>/dev/null || true
                   mkdir -p inject_tmp/usr/bin
                   mv "$LUCKY_BIN" inject_tmp/usr/bin/lucky
                   chmod 755 inject_tmp/usr/bin/lucky
               fi
-          else
-              echo "警告：未找到 $LUCKY_FILE，请检查 Private-Configs Release。"
           fi
           
-          # ----------------------------------------------------
-          # 3. 提取 OpenClash Meta 内核
-          # ----------------------------------------------------
           echo "获取 OpenClash Meta 内核..."
           mkdir -p inject_tmp/etc/openclash/core
           wget -qO /tmp/clash_meta.tar.gz "https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz" || true
@@ -554,17 +541,8 @@ jobs:
               fi
           fi
           
-          # 4. 处理 OAF 模块
-          echo "获取 OpenAppFilter 最新版本..."
           OAF_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/destan19/OpenAppFilter/releases/latest")
           OAF_UI_VER=$(echo "$OAF_RESP" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-          if [ -z "$OAF_UI_VER" ]; then
-              echo "❌ 获取 OAF 版本失败！API 返回内容如下："
-              echo "$OAF_RESP" | head -n 15
-          else
-              echo "✅ 获取到 OAF 最新版本: $OAF_UI_VER"
-          fi
-
           if [[ "$OAF_UI_VER" == v7* ]]; then
               OAF_KMOD_TAG="OAF_Kmods_v7.0.1"
           else
@@ -582,7 +560,6 @@ jobs:
               find inject_tmp/root/ -type d -empty -delete 2>/dev/null || true
           fi
           
-          # 5. 私密配置解压注入
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
               if [ -n "$PRIVATE_REPO" ]; then
                   gh release download "Private-Configs" -R "$PRIVATE_REPO" -p "private_config.zip" --clobber > /dev/null 2>&1 || true
@@ -606,9 +583,6 @@ jobs:
           
           sudo gunzip -f ./openwrt-armvirt-64-default-rootfs.tar.gz
           
-          # ----------------------------------------------------
-          # 6. 终极隐蔽：创建底层静默运行的服务 (仅负责 ADG 迁移)
-          # ----------------------------------------------------
           cat << 'EOF' > inject_tmp/etc/init.d/n1_boot_check
           #!/bin/sh /etc/rc.common
           START=99
@@ -621,7 +595,6 @@ jobs:
                       IS_EMMC=1
                   fi
           
-                  # [1] AdGuardHome 核心置换
                   if [ -f /usr/lib/adg_core/AdGuardHome ]; then
                       if [ "$IS_EMMC" = "1" ] && [ -d /mnt/mmcblk2p4 ]; then
                           DATA_DIR="/mnt/mmcblk2p4/AdGuardHome"
@@ -630,8 +603,6 @@ jobs:
                           chmod 755 "$DATA_DIR/AdGuardHome"
                           rm -rf /usr/bin/AdGuardHome
                           ln -sf "$DATA_DIR" /usr/bin/AdGuardHome
-          
-                          # 阅后即焚 (仅限 eMMC)
                           rm -rf /usr/lib/adg_core
                           rm -rf /usr/bin/AdGuardHome_data
                       else
@@ -645,7 +616,6 @@ jobs:
                       /etc/init.d/AdGuardHome restart 2>/dev/null
                   fi
           
-                  # [2] 服务自毁：在 eMMC 完全部署后，抹除本脚本的一切痕迹
                   if [ "$IS_EMMC" = "1" ]; then
                       rm -f /etc/rc.d/S99n1_boot_check
                       rm -f /etc/init.d/n1_boot_check
@@ -654,16 +624,11 @@ jobs:
           }
           EOF
           chmod +x inject_tmp/etc/init.d/n1_boot_check
-          # 注册服务，令其开机后台自启
           ln -sf ../init.d/n1_boot_check inject_tmp/etc/rc.d/S99n1_boot_check
           
-          # ----------------------------------------------------
-          # 7. 伪装用的原生 rc.local，后台界面只会显示这两行干净的代码
-          # ----------------------------------------------------
           cat << 'EOF' > inject_tmp/etc/rc.local
           # Put your custom commands here that should be executed once
           # the system init finished. By default this file does nothing.
-          
           exit 0
           EOF
           chmod +x inject_tmp/etc/rc.local
@@ -675,7 +640,6 @@ jobs:
               ln -sf /usr/sbin/openwrt-install-amlogic inject_tmp/root/install-to-emmc.sh
           fi
           
-          # 注入常规文件
           cd inject_tmp
           sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
           cd ..
@@ -688,11 +652,11 @@ jobs:
           sudo gzip -9 output/*.img
 
       - name: Extract Native Firmware & Sync Env (提取原生镜像并对接)
-        if: env.FIRMWARE_LOWER == 'lede-native' || env.FIRMWARE_LOWER == 'istoreos-native'
+        if: env.FIRMWARE_LOWER == 'lede-native' || env.FIRMWARE_LOWER == 'istoreos'
         run: |
           mkdir -p packit/output packit/
           
-          if [ "${{ env.FIRMWARE_LOWER }}" == "istoreos-native" ]; then
+          if [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
              TARGET_DIR="openwrt/bin/targets/amlogic/meson/"
              REAL_KERNEL_VER=$(ls openwrt/build_dir/target-*/linux-amlogic_meson/linux-* -d 2>/dev/null | head -n 1 | awk -F'linux-' '{print $NF}')
           else
@@ -700,7 +664,6 @@ jobs:
              REAL_KERNEL_VER=$(ls openwrt/build_dir/target-*/linux-amlogic_mesongx/linux-* -d 2>/dev/null | head -n 1 | awk -F'linux-' '{print $NF}')
           fi
           
-          # 【修改点】：直接查找原生生成的 *.img.gz 镜像，不限定 sysupgrade 后缀
           IMG_FILES=$(find "$TARGET_DIR" -type f -name "*.img.gz")
           
           if [ -n "$IMG_FILES" ]; then
@@ -715,11 +678,9 @@ jobs:
           
           if [ -z "$REAL_KERNEL_VER" ]; then REAL_KERNEL_VER="native"; fi
           
-          # 解析版本名供最终文件命名
           OPENWRT_VER="${{ inputs.source_branch }}"
           if [ "$OPENWRT_VER" == "master" ]; then OPENWRT_VER="R$(date +%y.%m.%d)"; fi
           
-          # 伪造 make.env
           echo "KERNEL_VERSION=$REAL_KERNEL_VER" >> packit/make.env
           echo "OPENWRT_VER=$OPENWRT_VER" >> packit/make.env
           echo "WHOAMI=粉墨悲欢@恩山" >> packit/make.env
@@ -736,9 +697,8 @@ jobs:
           for img in packit/output/*.img.gz; do
             ORIG_NAME=$(basename "$img")
             FORMAT_SUFFIX=""
-            if echo "$ORIG_NAME" | grep -q "ext4"; then
-              FORMAT_SUFFIX="-ext4"
-            elif echo "$ORIG_NAME" | grep -q -E "squashfs|sfs"; then
+            # 取消 ext4 后缀追加，保持命名纯净；仅针对特殊的 squashfs 打标记
+            if echo "$ORIG_NAME" | grep -q -E "squashfs|sfs"; then
               FORMAT_SUFFIX="-sfs"
             fi
           
@@ -770,12 +730,8 @@ jobs:
             fi
           fi
           
-          # ==========================================
-          # 【核心逻辑新增】动态识别分支名称作为 Release Tag
-          # ==========================================
           BRANCH_NAME="${{ github.ref_name }}"
           
-          # 使用启动时记录的固定日期，而不是 $(date +%Y.%m.%d)
           if [ "$BRANCH_NAME" == "main" ] || [ "$BRANCH_NAME" == "master" ]; then
             BUILD_DATE="v${{ env.START_DATE }}"
           else
@@ -786,7 +742,6 @@ jobs:
             fi
           fi
           
-          # 💡 将 personal 的发布固定收集到单一的 'personal' 页面
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
             TAG_NAME="personal"
           else

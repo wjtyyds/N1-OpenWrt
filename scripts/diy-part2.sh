@@ -247,6 +247,63 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
 
     curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh
     bash add_turboacc.sh --no-sfe
+
+elif [ "$FIRMWARE_TYPE" == "istoreos" ]; then
+    echo "====== 开始执行 iStoreOS 专属定制 ======"
+
+    # 1. 强力卸载 iStoreOS 自带的冲突插件与相关依赖
+    istoreos_conflict_plugins=(
+        "luci-app-passwall" "passwall"
+        "luci-app-adguardhome" "adguardhome"
+        "luci-app-openclash" "openclash"
+        "luci-app-oaf" "openappfilter" "appfilter"
+        "luci-app-lucky" "lucky"
+        "luci-app-daed" "luci-app-dae" "dae" "daed"
+    )
+    for plugin in "${istoreos_conflict_plugins[@]}"; do
+        ./scripts/feeds uninstall "$plugin" || true
+        rm -rf feeds/packages/*/*/"$plugin" 2>/dev/null
+        rm -rf feeds/luci/*/*/"$plugin" 2>/dev/null
+        rm -rf feeds/helloworld/"$plugin" 2>/dev/null
+    done
+
+    # 2. 深度清理 Passwall 相关的旧版底层核心 (防止编译时依赖冲突)
+    rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls} 2>/dev/null
+
+    if [ "$BUILD_TYPE" == "personal" ]; then
+        echo "【Personal 版本】：物理抹除多余代理仓库..."
+        rm -rf feeds/helloworld 2>/dev/null
+    fi
+
+    # 3. 拉取你指定的定制源
+    git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
+    git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
+    clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
+
+    if [ "$BUILD_TYPE" != "personal" ]; then
+        git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
+        clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
+    fi
+
+    # 4. OpenClash 浅克隆 (精准拉取核心目录)
+    OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
+    echo "正在获取 OpenClash 最新版本..."
+    OPENCLASH_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/vernesong/OpenClash/releases/latest")
+    OPENCLASH_TAG=$(echo "$OPENCLASH_RESP" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    mkdir -p /tmp/OpenClash && cd /tmp/OpenClash
+    git init
+    git remote add origin "$OPENCLASH_REPO"
+    git config core.sparseCheckout true
+    echo "luci-app-openclash/*" >> .git/info/sparse-checkout
+    if [ -n "$OPENCLASH_TAG" ]; then
+        git pull --depth 1 origin "$OPENCLASH_TAG"
+    else
+        git pull --depth 1 origin master
+    fi
+
+    mv luci-app-openclash $GITHUB_WORKSPACE/openwrt/package/custom/
+    cd $GITHUB_WORKSPACE/openwrt
+    rm -rf /tmp/OpenClash
 fi
 
 # ==========================================
