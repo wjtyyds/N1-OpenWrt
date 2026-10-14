@@ -1,5 +1,5 @@
 name: Build N1 Firmware
-run-name: "📦 ${{ inputs.firmware_type }}-${{ inputs.source_branch }} ${{ inputs.firmware_type != 'Lede-Native' && inputs.firmware_type != 'iStoreOS' && format('| Kernel {0}-{1} ', inputs.kernel_version, inputs.kernel_builder == 'kernel_stable' && 'stable' || 'flippy') || '' }}| ${{ inputs.build_type }}"
+run-name: "📦 ${{ inputs.firmware_type }}${{ inputs.firmware_type == 'iStoreOS' && '-' || ' ' }}${{ inputs.source_branch }}${{ inputs.custom_tag != '' && format(' {0}', inputs.custom_tag) || '' }} ${{ inputs.firmware_type != 'Lede-Native' && inputs.firmware_type != 'iStoreOS' && format('| Kernel {0}-{1} ', inputs.kernel_version, inputs.kernel_builder == 'kernel_stable' && 'stable' || 'flippy') || '' }}| ${{ inputs.build_type }}"
 on:
   workflow_dispatch:
     inputs:
@@ -26,6 +26,11 @@ on:
         description: '填写源码分支或 Tag (若是 lede，可直接填写 Rxx.xx.xx 当作标题)'
         required: true
         default: 'v25.12.5'
+      custom_tag:
+        description: '附加显示标签 (例如: R26.10.15，仅作标题显示和触发时光机)'
+        required: false
+        default: ''
+
       kernel_version:
         description: '打包内核版本 (注：若是原生编译则无需理会此项)'
         required: true
@@ -103,30 +108,61 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_TOKEN }}
         run: |
+          CUSTOM_TAG="${{ inputs.custom_tag }}"
+          
           if [ "${{ env.FIRMWARE_LOWER }}" == "openwrt" ]; then
             REPO_URL="https://github.com/openwrt/openwrt"
             TARGET_BRANCH="${{ inputs.source_branch }}"
+          
           elif [ "${{ env.FIRMWARE_LOWER }}" == "immortalwrt" ]; then
             REPO_URL="https://github.com/immortalwrt/immortalwrt"
             TARGET_BRANCH="${{ inputs.source_branch }}"
+          
           elif [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
             REPO_URL="https://github.com/istoreos/istoreos.git"
             # 智能补全分支前缀
             if [[ "${{ inputs.source_branch }}" != istoreos-* ]]; then
-              TARGET_BRANCH="istoreos-${{ inputs.source_branch }}"
+              BASE_BRANCH="istoreos-${{ inputs.source_branch }}"
             else
-              TARGET_BRANCH="${{ inputs.source_branch }}"
+              BASE_BRANCH="${{ inputs.source_branch }}"
             fi
+          
+            # 🌟 iStoreOS 专属时光机逻辑 🌟
+            if [[ "$CUSTOM_TAG" =~ ^R([0-9]{2})\.([0-9]{2})\.([0-9]{2})$ ]]; then
+              YEAR="20${BASH_REMATCH[1]}"
+              MONTH="${BASH_REMATCH[2]}"
+              DAY="${BASH_REMATCH[3]}"
+              TARGET_DATE="${YEAR}-${MONTH}-${DAY}T23:59:59Z"
+          
+              echo "⏳ 触发 iStoreOS 时光机：正在查找 $BASE_BRANCH 分支在 $TARGET_DATE 之前的最后一次提交..."
+              # 注意这里加了 sha=$BASE_BRANCH，确保从 25.12 分支获取历史，而不是 master
+              API_URL="https://api.github.com/repos/istoreos/istoreos/commits?sha=$BASE_BRANCH&until=$TARGET_DATE&per_page=1"
+              API_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$API_URL")
+              TARGET_BRANCH=$(echo "$API_RESP" | jq -r '.[0].sha' 2>/dev/null)
+          
+              if [ "$TARGET_BRANCH" == "null" ] || [ -z "$TARGET_BRANCH" ]; then
+                echo "⚠️ 时光机未找到符合条件的提交，将拉取分支的最新代码！"
+                TARGET_BRANCH="$BASE_BRANCH"
+              fi
+            else
+              TARGET_BRANCH="$BASE_BRANCH"
+            fi
+          
           elif [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
             REPO_URL="https://github.com/coolsnowwolf/lede"
+          
+            # Lede 时光机逻辑 (因为 Lede 日期写在 source_branch 里)
             if [[ "${{ inputs.source_branch }}" =~ ^R([0-9]{2})\.([0-9]{2})\.([0-9]{2})$ ]]; then
               YEAR="20${BASH_REMATCH[1]}"
               MONTH="${BASH_REMATCH[2]}"
               DAY="${BASH_REMATCH[3]}"
               TARGET_DATE="${YEAR}-${MONTH}-${DAY}T23:59:59Z"
+          
+              echo "⏳ 触发 Lede 时光机：查找 master 分支在 $TARGET_DATE 之前的最后一次提交..."
               API_URL="https://api.github.com/repos/coolsnowwolf/lede/commits?until=$TARGET_DATE&per_page=1"
               API_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$API_URL")
               TARGET_BRANCH=$(echo "$API_RESP" | jq -r '.[0].sha' 2>/dev/null)
+          
               if [ "$TARGET_BRANCH" == "null" ] || [ -z "$TARGET_BRANCH" ]; then
                 TARGET_BRANCH="master"
               fi
@@ -143,7 +179,7 @@ jobs:
           git checkout FETCH_HEAD
           
           CURRENT_HASH=$(git log -1 --format="%h")
-          echo "✅ 源码已成功锁定至最新提交哈希: $CURRENT_HASH"
+          echo "✅ 源码已成功锁定至哈希: $CURRENT_HASH"
 
       - name: Update & Install Feeds
         run: |
