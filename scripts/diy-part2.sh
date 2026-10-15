@@ -70,7 +70,7 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     fi
 
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
-    git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
+    git clone --depth 1 https://github.com/gdy666/luci-app-lucky.git package/custom/lucky
 
     if [ "$BUILD_TYPE" != "personal" ]; then
         git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
@@ -144,7 +144,7 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     fi
 
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
-    git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
+    git clone --depth 1 https://github.com/gdy666/luci-app-lucky.git package/custom/lucky
 
     if [ "$BUILD_TYPE" != "personal" ]; then
         git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
@@ -217,7 +217,7 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
 
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/lisaac/luci-app-diskman package/custom/luci-app-diskman
-    git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
+    git clone --depth 1 https://github.com/gdy666/luci-app-lucky.git package/custom/lucky
 
     if [ "$BUILD_TYPE" != "personal" ]; then
         git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
@@ -295,7 +295,7 @@ elif [ "$FIRMWARE_TYPE" == "istoreos" ]; then
 
     # 3. 拉取你指定的定制源
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
-    git clone --depth 1 https://github.com/wjtyyds/luci-app-lucky.git package/custom/lucky
+    git clone --depth 1 https://github.com/gdy666/luci-app-lucky.git package/custom/lucky
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
 
     if [ "$BUILD_TYPE" != "personal" ]; then

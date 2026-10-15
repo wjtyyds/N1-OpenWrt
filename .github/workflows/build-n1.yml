@@ -423,7 +423,7 @@ jobs:
           fi
           
           echo "注入 AdGuardHome 引导脚本..."
-          cat << 'EOF' > $BASE_FILES/etc/init.d/n1_boot_check
+          cat << 'EOF' > $BASE_FILES/etc/init.d/sys_env_init
           #!/bin/sh /etc/rc.common
           START=99
           start() {
@@ -454,14 +454,14 @@ jobs:
                       /etc/init.d/AdGuardHome restart 2>/dev/null
                   fi
                   if [ "$IS_EMMC" = "1" ]; then
-                      rm -f /etc/rc.d/S99n1_boot_check
-                      rm -f /etc/init.d/n1_boot_check
+                      rm -f /etc/rc.d/S99sys_env_init
+                      rm -f /etc/init.d/sys_env_init
                   fi
               ) &
           }
           EOF
-          chmod +x $BASE_FILES/etc/init.d/n1_boot_check
-          ln -sf ../init.d/n1_boot_check $BASE_FILES/etc/rc.d/S99n1_boot_check
+          chmod +x $BASE_FILES/etc/init.d/sys_env_init
+          ln -sf ../init.d/sys_env_init $BASE_FILES/etc/rc.d/S99sys_env_init
           
           cat << 'EOF' > $BASE_FILES/etc/rc.local
           # Put your custom commands here that should be executed once
