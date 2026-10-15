@@ -182,7 +182,7 @@ jobs:
           echo "✅ 源码已成功锁定至哈希: $CURRENT_HASH"
           
           # 新增：注释掉 helloworld 软件源
-          sed -i 's/^src-git helloworld/#src-git helloworld/g' openwrt/feeds.conf.default
+          sed -i 's/^src-git helloworld/#src-git helloworld/g' feeds.conf.default
       - name: Update & Install Feeds
         run: |
           if [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
