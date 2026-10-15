@@ -599,10 +599,19 @@ jobs:
         id: organize
         env:
           ZIP_PASS: ${{ secrets.ZIP_PASS }}
+          CUSTOM_TAG: ${{ inputs.custom_tag }}
         run: |
           mkdir release_files
           source packit/make.env
           DATETIME=$(date +'%Y%m%d%H%M')
+          
+          # ====== 核心修复：处理文件名中的版本与 Tag ======
+          # 如果用户输入了 custom_tag，并且 firmware 不是 lede (因为 lede 的 tag 已经写在 OPENWRT_VER 里了)
+          if [ -n "$CUSTOM_TAG" ] && [[ "${{ env.FIRMWARE_LOWER }}" != lede* ]]; then
+             DISPLAY_VER="${OPENWRT_VER}-${CUSTOM_TAG}"
+          else
+             DISPLAY_VER="${OPENWRT_VER}"
+          fi
           
           for img in packit/output/*.img.gz; do
             ORIG_NAME=$(basename "$img")
@@ -612,7 +621,8 @@ jobs:
               FORMAT_SUFFIX="-sfs"
             fi
           
-            base_name="${{ env.FIRMWARE_LOWER }}-${OPENWRT_VER}-k${KERNEL_VERSION}_${DATETIME}${FORMAT_SUFFIX}"
+            # 使用新的 DISPLAY_VER 拼接最终名称
+            base_name="${{ env.FIRMWARE_LOWER }}-${DISPLAY_VER}-k${KERNEL_VERSION}_${DATETIME}${FORMAT_SUFFIX}"
             new_img_name="${base_name}.img.gz"
             cp "$img" "release_files/$new_img_name"
             echo "✅ 准备发布镜像: $new_img_name"

@@ -103,9 +103,10 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     echo "修复 LEDE Aurora 主题页脚空括号..."
     find package/custom/luci-theme-aurora -name "footer.ut" -exec sed -i 's/({{ version.distrevision }})/{% if (version.distrevision): %} ({{ version.distrevision }}){% endif %}/g' {} +
 
-    # 【在此处新增】：解除原生 Amlogic 镜像 256MB 的 rootfs 分区硬编码限制，突破空间瓶颈
-    echo "破解 Amlogic 原生打包 256MB 限制..."
-    sed -i 's/256 $(IMAGE_ROOTFS)/$(CONFIG_TARGET_ROOTFS_PARTSIZE) $(IMAGE_ROOTFS)/g' target/linux/amlogic/image/Makefile
+    # 暂时屏蔽，可供ext4使用，当前用squashfs
+    # 解除原生 Amlogic 镜像 256MB 的 rootfs 分区硬编码限制，突破空间瓶颈
+#    echo "破解 Amlogic 原生打包 256MB 限制..."
+#    sed -i 's/256 $(IMAGE_ROOTFS)/$(CONFIG_TARGET_ROOTFS_PARTSIZE) $(IMAGE_ROOTFS)/g' target/linux/amlogic/image/Makefile
 
 elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     echo "====== 开始执行 ImmortalWrt 专属定制 ======"
