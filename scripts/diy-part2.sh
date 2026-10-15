@@ -30,7 +30,7 @@ mkdir -p package/custom
 # 0.5. 提取公共逻辑：Golang 升级
 # ==========================================
 if [[ "$FIRMWARE_TYPE" != lede* ]] && [ "$BUILD_TYPE" != "personal" ]; then
-    echo "【Public 编译专属】：为 OpenWrt 和 ImmortalWrt 升级 Golang 1.27..."
+    echo "【Public 编译专属】：为 OpenWrt，ImmortalWrt，iStoreOS 升级 Golang 1.27..."
     rm -rf feeds/packages/lang/golang
     git clone -b 27.x --depth 1 https://github.com/sbwml/packages_lang_golang.git feeds/packages/lang/golang
     ./scripts/feeds install -a -f
