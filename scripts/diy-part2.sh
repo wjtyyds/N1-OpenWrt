@@ -56,12 +56,10 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
         ./scripts/feeds uninstall "$plugin" || true
         rm -rf feeds/packages/*/*/"$plugin"
         rm -rf feeds/luci/*/*/"$plugin"
-        rm -rf feeds/helloworld/"$plugin" 2>/dev/null
     done
 
     # 💡 核心修复：为 Public 版的 passwall 让路，强制删除系统自带的老旧核心
     rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls}
-    rm -rf feeds/helloworld/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,v2ray-plugin,xray-plugin,geoview,shadow-tls} 2>/dev/null
     rm -rf feeds/luci/applications/luci-app-passwall
 
     if [ "$BUILD_TYPE" == "personal" ]; then
@@ -127,7 +125,6 @@ elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
         ./scripts/feeds uninstall "$plugin" || true
         rm -rf feeds/packages/*/*/"$plugin"
         rm -rf feeds/luci/*/*/"$plugin"
-        rm -rf feeds/helloworld/"$plugin" 2>/dev/null
     done
 
     # 💡 核心修复：清理官方包中干涉 Passwall 核心的旧版组件
@@ -200,7 +197,6 @@ elif [ "$FIRMWARE_TYPE" == "openwrt" ]; then
         ./scripts/feeds uninstall "$plugin" || true
         rm -rf feeds/packages/*/*/"$plugin"
         rm -rf feeds/luci/*/*/"$plugin"
-        rm -rf feeds/helloworld/"$plugin" 2>/dev/null
     done
 
     # 💡 核心修复：清理官方包中干涉 Passwall 核心的旧版组件
@@ -282,7 +278,6 @@ elif [ "$FIRMWARE_TYPE" == "istoreos" ]; then
         ./scripts/feeds uninstall "$plugin" || true
         rm -rf feeds/packages/*/*/"$plugin" 2>/dev/null
         rm -rf feeds/luci/*/*/"$plugin" 2>/dev/null
-        rm -rf feeds/helloworld/"$plugin" 2>/dev/null
     done
 
     # 2. 深度清理 Passwall 相关的旧版底层核心 (防止编译时依赖冲突)
@@ -385,6 +380,11 @@ echo "# Firmware compiled and customized by 粉墨悲欢" >> ${FILES_DIR}/etc/pr
 cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
 #!/bin/sh
 
+EOF
+
+# 针对 lede-native 排除手动加载 OAF 的步骤
+if [ "$FIRMWARE_TYPE" != "lede-native" ]; then
+cat << 'EOF' >> ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
 # 1. OAF 模块加载 (兼容 F大版本。若是纯原生编译 /root/oaf.ko 不存在，此逻辑自动忽略)
 if [ -f /root/oaf.ko ]; then
     KVER=$(uname -r)
@@ -395,6 +395,7 @@ if [ -f /root/oaf.ko ]; then
     modprobe oaf
 fi
 EOF
+fi
 
 # 第二部分：Sysctl 注入 (明确排除 iStoreOS)
 if [ "$FIRMWARE_TYPE" != "istoreos" ]; then

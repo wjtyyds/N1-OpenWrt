@@ -180,7 +180,9 @@ jobs:
           
           CURRENT_HASH=$(git log -1 --format="%h")
           echo "✅ 源码已成功锁定至哈希: $CURRENT_HASH"
-
+          
+          # 新增：注释掉 helloworld 软件源
+          sed -i 's/^src-git helloworld/#src-git helloworld/g' openwrt/feeds.conf.default
       - name: Update & Install Feeds
         run: |
           if [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
@@ -235,21 +237,16 @@ jobs:
           sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client is not set/g' openwrt/.config
           sed -i 's/CONFIG_PACKAGE_shadowsocks-rust-sslocal=y/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/g' openwrt/.config
           
-          if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
-            echo "====== 开始向 Lede-Native 白纸注入选定插件 ======"
-            echo "CONFIG_PACKAGE_luci-app-diskman=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-diskman_INCLUDE_lsblk=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-oui=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-package-manager=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-lucky=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-openclash=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
-
+            if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
+              echo "====== 开始向 Lede-Native 白纸注入选定插件 ======"
+              echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-lucky=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-openclash=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
+          
             if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
-              echo "CONFIG_PACKAGE_luci-app-dockerman=y" >> openwrt/.config
               echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
               echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
               echo "CONFIG_PACKAGE_luci-app-passwall=y" >> openwrt/.config
@@ -314,23 +311,6 @@ jobs:
           echo "CONFIG_DEVEL=y" >> openwrt/.config
           echo "CONFIG_BPF_TOOLCHAIN_HOST=y" >> openwrt/.config
           
-          if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
-            echo "====== 修正 Amlogic 分区锁，并强迫生成指定格式镜像 ======"
-            if [ -f openwrt/target/linux/amlogic/image/Makefile ]; then
-              sed -i 's/256/1024/g' openwrt/target/linux/amlogic/image/Makefile
-              sed -i 's/ROOTFS_PARTSIZE:=.*/ROOTFS_PARTSIZE:=1024/g' openwrt/target/linux/amlogic/image/Makefile
-            fi
-          
-            sed -i 's/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/CONFIG_TARGET_ROOTFS_EXT4FS=y/g' openwrt/.config
-            grep -q "CONFIG_TARGET_ROOTFS_EXT4FS=y" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_EXT4FS=y" >> openwrt/.config
-            grep -q "CONFIG_TARGET_IMAGES_GZIP=y" openwrt/.config || echo "CONFIG_TARGET_IMAGES_GZIP=y" >> openwrt/.config
-          
-            sed -i 's/CONFIG_TARGET_ROOTFS_SQUASHFS=y/# CONFIG_TARGET_ROOTFS_SQUASHFS is not set/g' openwrt/.config
-          
-            sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=1024/g' openwrt/.config
-            grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" openwrt/.config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> openwrt/.config
-          fi
-          
           if [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
             echo "====== 开始向 iStoreOS 写入定制插件配置 ======"
           
@@ -363,14 +343,6 @@ jobs:
           
           cd openwrt
           make defconfig
-          
-          if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
-            echo "====== 锁定 EXT4 配置 ======"
-            sed -i 's/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/CONFIG_TARGET_ROOTFS_EXT4FS=y/g' .config
-            grep -q "CONFIG_TARGET_ROOTFS_EXT4FS=y" .config || echo "CONFIG_TARGET_ROOTFS_EXT4FS=y" >> .config
-            sed -i 's/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=1024/g' .config
-            grep -q "CONFIG_TARGET_ROOTFS_PARTSIZE=" .config || echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> .config
-          fi
 
       - name: Inject Binaries & Configs (原生编译前置注入)
         if: env.FIRMWARE_LOWER == 'lede-native' || env.FIRMWARE_LOWER == 'istoreos'
