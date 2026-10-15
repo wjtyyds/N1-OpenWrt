@@ -351,6 +351,21 @@ jobs:
             fi
           fi
           
+          if [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
+            echo "====== 修复 LEDE uclient-fetch 的 SSL 兼容性 Bug ======"
+            # 禁用有兼容性问题的 openssl 插件
+            sed -i 's/CONFIG_PACKAGE_libustream-openssl=y/# CONFIG_PACKAGE_libustream-openssl is not set/g' openwrt/.config
+            sed -i 's/CONFIG_DEFAULT_libustream-openssl=y/# CONFIG_DEFAULT_libustream-openssl is not set/g' openwrt/.config
+          
+            # 强制替换为更稳定、兼容性更好的 mbedtls
+            echo "CONFIG_PACKAGE_libustream-mbedtls=y" >> openwrt/.config
+            echo "CONFIG_DEFAULT_libustream-mbedtls=y" >> openwrt/.config
+          
+            # 确保基础证书链存在
+            echo "CONFIG_PACKAGE_ca-bundle=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_ca-certificates=y" >> openwrt/.config
+          fi
+          
           cd openwrt
           make defconfig
 
