@@ -516,9 +516,6 @@ jobs:
           ROOTFS_FILE=$(find ../openwrt/bin/targets/ -type f -name "*-rootfs.tar.gz" | head -n 1)
           sudo mv "$ROOTFS_FILE" ./openwrt-armvirt-64-default-rootfs.tar.gz
           
-          # ==========================================
-          # 仅保留针对 F大打包脚本的 OAF 模块后置注入
-          # ==========================================
           mkdir -p inject_tmp/root
           
           echo "获取 OAF ko 内核模块..."
@@ -544,14 +541,21 @@ jobs:
               find inject_tmp/root/ -type d -empty -delete 2>/dev/null || true
           fi
           
-          # 执行注入 (用 tar -r 追加 oaf.ko 进去)
           sudo gunzip -f ./openwrt-armvirt-64-default-rootfs.tar.gz
+          
+          # ====== 恢复：修复 F大打包模式下安装 eMMC 文件的软链接 ======
+          if tar -O -xf ./openwrt-armvirt-64-default-rootfs.tar etc/os-release usr/lib/os-release etc/openwrt_release 2>/dev/null | grep -qiE '^OPENWRT_RELEASE="?LEDE' || tar -tf ./openwrt-armvirt-64-default-rootfs.tar | grep -q -E '^\.?/?root/install-to-emmc.sh$'; then
+              sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar root/install-to-emmc.sh 2>/dev/null || true
+              sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar ./root/install-to-emmc.sh 2>/dev/null || true
+              mkdir -p inject_tmp/root
+              ln -sf /usr/sbin/openwrt-install-amlogic inject_tmp/root/install-to-emmc.sh
+          fi
+          
           cd inject_tmp
           sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
           cd ..
           sudo gzip -9 ./openwrt-armvirt-64-default-rootfs.tar
           
-          # 执行打包出 img
           sudo chmod +x mk_s905d_n1.sh
           sudo ./mk_s905d_n1.sh
           
