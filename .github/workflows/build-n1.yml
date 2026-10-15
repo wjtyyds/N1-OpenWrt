@@ -227,7 +227,8 @@ jobs:
       - name: Load Configuration
         run: |
           CONF_NAME="${{ env.FIRMWARE_LOWER }}"
-          if [ "$CONF_NAME" == "lede-native" ]; then CONF_NAME="lede-native"; fi
+          # 将 lede-native 统一定向为 lede
+          if [ "$CONF_NAME" == "lede-native" ]; then CONF_NAME="lede"; fi
           cp configs/${CONF_NAME}.config openwrt/.config
           
           sed -i 's/CONFIG_KERNEL_DEBUG_INFO=y/# CONFIG_KERNEL_DEBUG_INFO is not set/g' openwrt/.config
@@ -237,14 +238,15 @@ jobs:
           sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client is not set/g' openwrt/.config
           sed -i 's/CONFIG_PACKAGE_shadowsocks-rust-sslocal=y/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/g' openwrt/.config
           
-            if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
-              echo "====== 开始向 Lede-Native 白纸注入选定插件 ======"
-              echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-lucky=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-openclash=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
+          # 针对 Lede 体系(包含原 lede-native) 写入白纸基础插件
+          if [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
+            echo "====== 开始向 Lede 体系注入选定插件 ======"
+            echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-lucky=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-openclash=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
           
             if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
               echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
@@ -262,10 +264,23 @@ jobs:
               echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y" >> openwrt/.config
               echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=y" >> openwrt/.config
             fi
+          
+            # ====== 注意：修复 F大的打包配置 ======
+            if [ "${{ env.FIRMWARE_LOWER }}" == "lede" ]; then
+              echo "====== 修正 Lede 为 F大打包模式 (生成 tar.gz, 关闭 ext4) ======"
+              sed -i 's/# CONFIG_TARGET_ROOTFS_TARGZ is not set/CONFIG_TARGET_ROOTFS_TARGZ=y/g' openwrt/.config
+              echo "CONFIG_TARGET_ROOTFS_TARGZ=y" >> openwrt/.config
+              sed -i 's/CONFIG_TARGET_ROOTFS_EXT4FS=y/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/g' openwrt/.config
+              sed -i 's/CONFIG_TARGET_ROOTFS_SQUASHFS=y/# CONFIG_TARGET_ROOTFS_SQUASHFS is not set/g' openwrt/.config
+              sed -i '/CONFIG_TARGET_EXT4_/d' openwrt/.config
+              sed -i '/CONFIG_TARGET_IMAGES_GZIP/d' openwrt/.config
+              sed -i '/CONFIG_TARGET_ROOTFS_PARTSIZE/d' openwrt/.config
+            fi
           fi
-
+          
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
             echo "====== 开始注入 Personal 版本专属强效断根指令 ======"
+            # ... (保留原有的所有 Personal 版断根指令，不要动) ...
             sed -i 's/CONFIG_PACKAGE_luci-app-dockerman=y/# CONFIG_PACKAGE_luci-app-dockerman is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_luci-lib-docker=y/# CONFIG_PACKAGE_luci-lib-docker is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_docker=y/# CONFIG_PACKAGE_docker is not set/g' openwrt/.config
@@ -301,11 +316,6 @@ jobs:
             sed -i 's/CONFIG_PACKAGE_tcping=y/# CONFIG_PACKAGE_tcping is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_geoview=y/# CONFIG_PACKAGE_geoview is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_simple-obfs-client=y/# CONFIG_PACKAGE_simple-obfs-client is not set/g' openwrt/.config
-          fi
-          
-          if [ "${{ env.BUILD_LOWER }}" == "public" ] && [ "${{ env.FIRMWARE_LOWER }}" != "lede-native" ]; then
-            echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
           fi
           
           echo "CONFIG_DEVEL=y" >> openwrt/.config
@@ -345,7 +355,7 @@ jobs:
           make defconfig
 
       - name: Inject Binaries & Configs (原生编译前置注入)
-        if: env.FIRMWARE_LOWER == 'lede-native' || env.FIRMWARE_LOWER == 'istoreos'
+        if: startsWith(env.FIRMWARE_LOWER, 'lede') || env.FIRMWARE_LOWER == 'istoreos'
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_TOKEN }}
           PRIVATE_REPO: ${{ secrets.PRIVATE_REPO }}
@@ -506,58 +516,12 @@ jobs:
           ROOTFS_FILE=$(find ../openwrt/bin/targets/ -type f -name "*-rootfs.tar.gz" | head -n 1)
           sudo mv "$ROOTFS_FILE" ./openwrt-armvirt-64-default-rootfs.tar.gz
           
-          mkdir -p inject_tmp/root inject_tmp/etc inject_tmp/usr/lib/adg_core inject_tmp/etc/init.d inject_tmp/etc/rc.d
+          # ==========================================
+          # 仅保留针对 F大打包脚本的 OAF 模块后置注入
+          # ==========================================
+          mkdir -p inject_tmp/root
           
-          echo "获取 AdGuardHome 最新稳定版..."
-          AGH_API="https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest"
-          AGH_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$AGH_API")
-          AGH_URL=$(echo "$AGH_RESP" | grep "browser_download_url" | grep "linux_arm64.tar.gz" | head -n 1 | cut -d '"' -f 4)
-          if [ -n "$AGH_URL" ]; then
-              wget -qO /tmp/agh.tar.gz "$AGH_URL"
-              mkdir -p /tmp/agh_extract
-              tar -xzf /tmp/agh.tar.gz -C /tmp/agh_extract
-              AGH_BIN=$(find /tmp/agh_extract -type f -name "AdGuardHome" | head -n 1)
-              if [ -n "$AGH_BIN" ]; then
-                  mv "$AGH_BIN" inject_tmp/usr/lib/adg_core/AdGuardHome
-                  chmod 755 inject_tmp/usr/lib/adg_core/AdGuardHome
-              fi
-          fi
-          
-          echo "从私有库获取 Lucky 核心..."
-          if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
-              LUCKY_FILE="lucky_2.27.2_Linux_arm64_wanji_docker.tar.gz"
-          else
-              LUCKY_FILE="lucky_2.27.2_Linux_arm64_wanji.tar.gz"
-          fi
-          
-          if [ -n "$PRIVATE_REPO" ]; then
-              gh release download "Private-Configs" -R "$PRIVATE_REPO" -p "$LUCKY_FILE" --clobber > /dev/null 2>&1 || true
-          fi
-          
-          if [ -f "$LUCKY_FILE" ]; then
-              mkdir -p /tmp/lucky_extract
-              tar -xzf "$LUCKY_FILE" -C /tmp/lucky_extract
-              LUCKY_BIN=$(find /tmp/lucky_extract -type f -name "lucky" | head -n 1)
-              if [ -n "$LUCKY_BIN" ]; then
-                  sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar usr/bin/lucky ./usr/bin/lucky 2>/dev/null || true
-                  mkdir -p inject_tmp/usr/bin
-                  mv "$LUCKY_BIN" inject_tmp/usr/bin/lucky
-                  chmod 755 inject_tmp/usr/bin/lucky
-              fi
-          fi
-          
-          echo "获取 OpenClash Meta 内核..."
-          mkdir -p inject_tmp/etc/openclash/core
-          wget -qO /tmp/clash_meta.tar.gz "https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz" || true
-          if [ -f /tmp/clash_meta.tar.gz ]; then
-              mkdir -p /tmp/clash_meta_tmp
-              tar -xzf /tmp/clash_meta.tar.gz -C /tmp/clash_meta_tmp/ || true
-              if [ -f /tmp/clash_meta_tmp/clash ]; then
-                  mv /tmp/clash_meta_tmp/clash inject_tmp/etc/openclash/core/clash_meta
-                  chmod 755 inject_tmp/etc/openclash/core/clash_meta
-              fi
-          fi
-          
+          echo "获取 OAF ko 内核模块..."
           OAF_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/destan19/OpenAppFilter/releases/latest")
           OAF_UI_VER=$(echo "$OAF_RESP" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
           if [[ "$OAF_UI_VER" == v7* ]]; then
@@ -565,104 +529,29 @@ jobs:
           else
               OAF_KMOD_TAG="OAF_Kmods_v6.1.8"
           fi
+          
           if [ -n "$PRIVATE_REPO" ]; then
               gh release download "$OAF_KMOD_TAG" -R "$PRIVATE_REPO" -p "oaf-${REAL_KERNEL_VER}.tar.gz" --clobber > /dev/null 2>&1 || true
           fi
+          
           if [ ! -f "oaf-${REAL_KERNEL_VER}.tar.gz" ] && [ -f "../auto_import/oaf-${REAL_KERNEL_VER}.tar.gz" ]; then
               cp "../auto_import/oaf-${REAL_KERNEL_VER}.tar.gz" ./ || true
           fi
+          
           if [ -f "oaf-${REAL_KERNEL_VER}.tar.gz" ]; then
               tar -xzf "oaf-${REAL_KERNEL_VER}.tar.gz" -C inject_tmp/root/ 2>/dev/null || true
               find inject_tmp/root/ -type f -name "oaf.ko" -exec mv {} inject_tmp/root/oaf.ko \; 2>/dev/null || true
               find inject_tmp/root/ -type d -empty -delete 2>/dev/null || true
           fi
           
-          if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
-              if [ -n "$PRIVATE_REPO" ]; then
-                  gh release download "Private-Configs" -R "$PRIVATE_REPO" -p "private_config.zip" --clobber > /dev/null 2>&1 || true
-                  if [ -f "private_config.zip" ]; then
-                      mkdir -p private_conf_tmp
-                      unzip -q "private_config.zip" -d private_conf_tmp/ || true
-          
-                      if [ -f "private_conf_tmp/AdGuardHome.yaml" ]; then
-                          mkdir -p inject_tmp/etc
-                          mv private_conf_tmp/AdGuardHome.yaml inject_tmp/etc/AdGuardHome.yaml || true
-                      fi
-                      LUCKY_ZIP=$(ls private_conf_tmp/lucky_*.zip 2>/dev/null | head -n 1)
-                      if [ -n "$LUCKY_ZIP" ]; then
-                          mkdir -p inject_tmp/etc/config/lucky.daji
-                          unzip -q -o "$LUCKY_ZIP" -d inject_tmp/etc/config/lucky.daji/ || true
-                      fi
-                      rm -rf private_conf_tmp private_config.zip
-                  fi
-              fi
-          fi
-          
+          # 执行注入 (用 tar -r 追加 oaf.ko 进去)
           sudo gunzip -f ./openwrt-armvirt-64-default-rootfs.tar.gz
-          
-          cat << 'EOF' > inject_tmp/etc/init.d/n1_boot_check
-          #!/bin/sh /etc/rc.common
-          START=99
-          start() {
-              (
-                  sleep 5
-                  ROOT_DEV=$(df -h / | tail -n1 | awk '{print $1}')
-                  IS_EMMC=0
-                  if echo "$ROOT_DEV" | grep -q "mmcblk"; then
-                      IS_EMMC=1
-                  fi
-          
-                  if [ -f /usr/lib/adg_core/AdGuardHome ]; then
-                      if [ "$IS_EMMC" = "1" ] && [ -d /mnt/mmcblk2p4 ]; then
-                          DATA_DIR="/mnt/mmcblk2p4/AdGuardHome"
-                          mkdir -p "$DATA_DIR"
-                          cp -n /usr/lib/adg_core/AdGuardHome "$DATA_DIR/AdGuardHome"
-                          chmod 755 "$DATA_DIR/AdGuardHome"
-                          rm -rf /usr/bin/AdGuardHome
-                          ln -sf "$DATA_DIR" /usr/bin/AdGuardHome
-                          rm -rf /usr/lib/adg_core
-                          rm -rf /usr/bin/AdGuardHome_data
-                      else
-                          DATA_DIR="/usr/bin/AdGuardHome_data"
-                          mkdir -p "$DATA_DIR"
-                          cp -n /usr/lib/adg_core/AdGuardHome "$DATA_DIR/AdGuardHome"
-                          chmod 755 "$DATA_DIR/AdGuardHome"
-                          rm -rf /usr/bin/AdGuardHome
-                          ln -sf "$DATA_DIR" /usr/bin/AdGuardHome
-                      fi
-                      /etc/init.d/AdGuardHome restart 2>/dev/null
-                  fi
-          
-                  if [ "$IS_EMMC" = "1" ]; then
-                      rm -f /etc/rc.d/S99n1_boot_check
-                      rm -f /etc/init.d/n1_boot_check
-                  fi
-              ) &
-          }
-          EOF
-          chmod +x inject_tmp/etc/init.d/n1_boot_check
-          ln -sf ../init.d/n1_boot_check inject_tmp/etc/rc.d/S99n1_boot_check
-          
-          cat << 'EOF' > inject_tmp/etc/rc.local
-          # Put your custom commands here that should be executed once
-          # the system init finished. By default this file does nothing.
-          exit 0
-          EOF
-          chmod +x inject_tmp/etc/rc.local
-          
-          if tar -O -xf ./openwrt-armvirt-64-default-rootfs.tar etc/os-release usr/lib/os-release etc/openwrt_release 2>/dev/null | grep -qiE '^OPENWRT_RELEASE="?LEDE' || tar -tf ./openwrt-armvirt-64-default-rootfs.tar | grep -q -E '^\.?/?root/install-to-emmc.sh$'; then
-              sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar root/install-to-emmc.sh 2>/dev/null || true
-              sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar ./root/install-to-emmc.sh 2>/dev/null || true
-              mkdir -p inject_tmp/root
-              ln -sf /usr/sbin/openwrt-install-amlogic inject_tmp/root/install-to-emmc.sh
-          fi
-          
           cd inject_tmp
           sudo tar -rvf ../openwrt-armvirt-64-default-rootfs.tar ./* > /dev/null 2>&1
           cd ..
-          
           sudo gzip -9 ./openwrt-armvirt-64-default-rootfs.tar
           
+          # 执行打包出 img
           sudo chmod +x mk_s905d_n1.sh
           sudo ./mk_s905d_n1.sh
           
