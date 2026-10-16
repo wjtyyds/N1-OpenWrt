@@ -376,12 +376,6 @@ jobs:
             echo "CONFIG_PACKAGE_ca-certificates=y" >> openwrt/.config
           fi
           
-          # 【新增部分】：仅针对 iStoreOS 将直出镜像基础容量扩大到 4GB
-          if [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
-            echo "====== 将 iStoreOS 原生直出镜像分区从2G扩大到4G ======"
-            sed -i 's/2048/4096/g' openwrt/target/linux/amlogic/image/Makefile 2>/dev/null || true
-          fi
-          
           cd openwrt
           make defconfig
 
