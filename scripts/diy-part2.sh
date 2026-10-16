@@ -463,36 +463,46 @@ fi
 
 # ====== iStoreOS 修改默认原先配置设定 ======
 if [ "$FIRMWARE_TYPE" == "istoreos" ]; then
-    cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/97_personal_setup
+    # 💡 命名为 zzz_istoreos_setup，保证全系统绝对最后一个执行
+    cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/zzz_istoreos_setup
 #!/bin/sh
 
-# 1. 强制 LAN 口为静态 IP，指定 192.168.1.1，方便网线直连电脑进后台
-uci delete network.lan.type 2>/dev/null
-uci set network.lan.device='eth0'
-uci set network.lan.ifname='eth0'
+# 1. 强制设为静态 IP 192.168.1.1，绝对保留原本的 br-lan 桥接不变
 uci set network.lan.proto='static'
-uci delete network.lan.ipaddr
-uci add_list network.lan.ipaddr='192.168.1.1/24'
+uci set network.lan.ipaddr='192.168.1.1'
+uci set network.lan.netmask='255.255.255.0'
 uci delete network.lan.gateway 2>/dev/null
 uci delete network.lan.dns 2>/dev/null
 uci commit network
 
-# 2. 替换 root 密码为 password 的哈希值，跳过 iStoreOS 强制密码向导
+# 2. 强制开启 LAN 口的 DHCP 服务器，解决单网口设备不分配 IP 的问题
+uci set dhcp.lan.ignore='0' 2>/dev/null
+uci set dhcp.lan.start='100' 2>/dev/null
+uci set dhcp.lan.limit='150' 2>/dev/null
+uci set dhcp.lan.leasetime='12h' 2>/dev/null
+# 针对 iStoreOS 新版单网口的 DHCPv4 禁用问题，强制开启
+uci set dhcp.lan.dhcpv4='server' 2>/dev/null
+uci commit dhcp
+
+# 3. 替换 root 密码为 password 的哈希值，跳过 iStoreOS 强制密码向导
 sed -i 's/^root:[^:]*:/root:\$1\$V4UetPzk\$CYXluq4wUazHjmCDBCqXF.:/' /etc/shadow
 
-# 【新增】：强制设置 iStoreOS 默认主题为 Aurora
+# 4. 强制设置 iStoreOS 默认主题为 Aurora
 uci set luci.main.mediaurlbase='/luci-static/aurora' 2>/dev/null
 uci commit luci 2>/dev/null
 
-# 【新增】：精准配置 Aurora 为侧边栏并关闭快捷工具栏
+# 5. 精准配置 Aurora 为侧边栏并关闭快捷工具栏
 if [ -f /etc/config/aurora ]; then
     uci set aurora.theme.nav_type='sidebar' 2>/dev/null
     uci set aurora.theme.toolbar_enabled='0' 2>/dev/null
     uci commit aurora 2>/dev/null
 fi
 
-# 3. 脚本执行完毕后自毁 (阅后即焚)
-rm -f /etc/uci-defaults/97_personal_setup
+# 6. 重启网络服务，让刚刚修改的 IP 和 DHCP 立即生效
+/etc/init.d/network restart
+
+# 7. 脚本执行完毕后自毁 (阅后即焚)
+rm -f /etc/uci-defaults/zzz_istoreos_setup
 EOF
 
 # ====== 原本的 Personal 版设定 (针对非 iStoreOS) ======
