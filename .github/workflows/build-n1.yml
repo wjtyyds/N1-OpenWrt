@@ -241,6 +241,12 @@ jobs:
           # 针对 Lede 体系(包含原 lede-native) 写入白纸基础插件
           if [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
             echo "====== 开始向 Lede 体系注入选定插件 ======"
+          
+            # 【精准区分】：仅针对原生编译 (lede-native) 注入网卡驱动，F大内核自带无需注入
+            if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
+              echo "CONFIG_PACKAGE_kmod-phy-realtek=y" >> openwrt/.config
+            fi
+            
             echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
