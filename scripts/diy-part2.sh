@@ -103,11 +103,6 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     echo "修复 LEDE Aurora 主题页脚空括号..."
     find package/custom/luci-theme-aurora -name "footer.ut" -exec sed -i 's/({{ version.distrevision }})/{% if (version.distrevision): %} ({{ version.distrevision }}){% endif %}/g' {} +
 
-    # 暂时屏蔽，可供ext4使用，当前用squashfs
-    # 解除原生 Amlogic 镜像 256MB 的 rootfs 分区硬编码限制，突破空间瓶颈
-#    echo "破解 Amlogic 原生打包 256MB 限制..."
-#    sed -i 's/256 $(IMAGE_ROOTFS)/$(CONFIG_TARGET_ROOTFS_PARTSIZE) $(IMAGE_ROOTFS)/g' target/linux/amlogic/image/Makefile
-
 elif [ "$FIRMWARE_TYPE" == "immortalwrt" ]; then
     echo "====== 开始执行 ImmortalWrt 专属定制 ======"
 
@@ -322,7 +317,29 @@ elif [ "$FIRMWARE_TYPE" == "istoreos" ]; then
     mv luci-app-openclash $GITHUB_WORKSPACE/openwrt/package/custom/
     cd $GITHUB_WORKSPACE/openwrt
     rm -rf /tmp/OpenClash
+
+    # ====== 5. 仅限 iStoreOS 的专属定制修改 ======
+    echo "====== 执行 iStoreOS 专属定制修改 ======"
+
+    # 5.1 修复 Quickstart 家长控制 404 跳转
+    echo "修复 Quickstart 家长控制路径..."
+    find package/ feeds/ -path "*/luci-static/quickstart/*.js" -exec sed -i 's|admin/services/appfilter|admin/services/oaf|g' {} + 2>/dev/null || true
+
+    # 5.2 植入 SSH 登录 Banner 专属标志
+    echo "植入专属 SSH Banner 标志..."
+    BANNER_FILE=$(find package/ base-files/ -type f -name "banner" 2>/dev/null | head -n 1)
+    if [ -n "$BANNER_FILE" ] && [ -f "$BANNER_FILE" ]; then
+        # 如果是替换原始系统里的，确保不带脏数据
+        # 1. 恢复原始 banner (如果从别的分支过来，可能没改，不破坏结构直接改内容)
+        # 2. 将“Powered by”这行前面的空白替换为专属标志
+        sed -i 's/                                  Powered by OpenWRT/ Compiled by 粉墨悲欢@恩山        Powered by OpenWRT/g' "$BANNER_FILE"
+    fi
+
 fi
+# ==========================================
+# 结束 iStoreOS 专属分支
+# ==========================================
+
 
 # ==========================================
 # public 公共版：追加拉取 daede 等组件
@@ -345,27 +362,20 @@ fi
 # 1.5 OAF 翻译缺失动态修复 (带向前兼容判断)
 # ==========================================
 echo "====== 检查并修复 OAF 翻译文件 ======"
-# 全局查找 oaf.po 文件路径 (无论原作者日后目录结构怎么变都能精准命中)
+# 全局查找 oaf.po 文件路径
 OAF_PO_FILE=$(find package/custom/ -name "oaf.po" 2>/dev/null | head -n 1)
 if [ -n "$OAF_PO_FILE" ] && [ -f "$OAF_PO_FILE" ]; then
-    # 兼容性判断：检测文件内是否已经存在 "/etc/fwx."
-    # 如果不存在，说明原作者还没修复，此时走我们的修复逻辑
     if ! grep -q "/etc/fwx\." "$OAF_PO_FILE"; then
         echo "🔧 发现 OAF 源码翻译未同步，正在动态热修复 /etc/fwx 中文显示..."
-
-        # 仅针对包含关键字的行，精准替换 /etc/oaf 为 /etc/fwx
-        # 1. 修复英文 msgid (必须带点，精确匹配底层源码)
         sed -i '/The user.s basic data/ s|/etc/oaf\.|/etc/fwx\.|g' "$OAF_PO_FILE"
-
-        # 2. 修复中文 msgstr (翻译显示内容)
         sed -i '/用户的基本数据/ s|/etc/oaf|/etc/fwx|g' "$OAF_PO_FILE"
     else
-        # 如果某天原作者自己改好了，包含了 fwx，这段逻辑就会自动跳过，绝不引发冲突
         echo "🌟 检测到 OAF 原作者已修复该翻译，自动跳过自定义修改。"
     fi
 else
     echo "⚠️ 未找到 oaf.po 翻译文件，跳过修复。"
 fi
+
 
 # ==========================================
 # 2. 本地化环境与守护脚本注入
@@ -380,7 +390,7 @@ echo 'BUILD_AUTHOR="粉墨悲欢@EnShan"' >> ${FILES_DIR}/etc/os-release
 echo "# Firmware compiled and customized by 粉墨悲欢" >> ${FILES_DIR}/etc/profile
 # ----------------------------------------
 
-# 💡 命名为 zz_custom_setup 保证全系统最后一个执行，绝对秒杀 LEDE 祖传跑分 (传承 09 基底的防爆设计)
+# 💡 命名为 zz_custom_setup 保证全系统最后一个执行，绝对秒杀 LEDE 祖传跑分
 # 第一部分：写入公共开头和 OAF 模块逻辑
 cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
 #!/bin/sh
@@ -449,7 +459,55 @@ rm -f /etc/uci-defaults/98_lede_setup
 EOF
 fi
 
-if [ "$BUILD_TYPE" == "personal" ]; then
+# ====== iStoreOS 专属 Personal 版设定 ======
+if [ "$FIRMWARE_TYPE" == "istoreos" ]; then
+    cat << EOF > ${FILES_DIR}/etc/uci-defaults/97_personal_setup
+#!/bin/sh
+# 强制设为静态协议，指定 192.168.1.1
+uci delete network.lan.type 2>/dev/null
+uci set network.lan.device='eth0'
+uci set network.lan.ifname='eth0'
+uci set network.lan.proto='static'
+uci delete network.lan.ipaddr
+uci add_list network.lan.ipaddr='192.168.1.1/24'
+uci delete network.lan.gateway 2>/dev/null
+uci delete network.lan.dns 2>/dev/null
+
+uci set network.wan=interface
+uci set network.wan.proto='pppoe'
+uci set network.wan.device='eth0'
+uci set network.wan.ifname='eth0'
+uci set network.wan.username='${PPPOE_USER}'
+uci set network.wan.password='${PPPOE_PASS}'
+uci set network.wan.ipv6='auto'
+uci set network.wan.norelease='1'
+uci set network.wan.multipath='off'
+uci commit network
+
+mkdir -p /etc/crontabs
+if ! grep -q "drop_caches" /etc/crontabs/root 2>/dev/null; then
+    echo "0 22 * * * sync; echo 3 > /proc/sys/vm/drop_caches" >> /etc/crontabs/root
+fi
+
+# 启用无线并设置 SSID 与密码
+uci set wireless.radio0.disabled=0 2>/dev/null
+uci set wireless.default_radio0.ssid='Phicomm_n1' 2>/dev/null
+uci set wireless.default_radio0.encryption='psk2' 2>/dev/null
+uci set wireless.default_radio0.key='password' 2>/dev/null
+uci commit wireless 2>/dev/null
+
+# 替换 root 密码为 password 的哈希值，跳过 iStoreOS 强制密码向导
+sed -i 's/^root:[^:]*:/root:\$1\$V4UetPzk\$CYXluq4wUazHjmCDBCqXF.:/' /etc/shadow
+
+uci set AdGuardHome.AdGuardHome.configpath='/etc/AdGuardHome.yaml'
+uci commit AdGuardHome
+
+# 阅后即焚
+rm -f /etc/uci-defaults/97_personal_setup
+EOF
+
+# ====== 原本的 Personal 版设定 (针对非 iStoreOS) ======
+elif [ "$BUILD_TYPE" == "personal" ]; then
     cat << EOF > ${FILES_DIR}/etc/uci-defaults/97_personal_setup
 #!/bin/sh
 uci delete network.lan.type 2>/dev/null
@@ -483,5 +541,3 @@ uci commit AdGuardHome
 rm -f /etc/uci-defaults/97_personal_setup
 EOF
 fi
-
-# 【注】：原先在此处的 N1 eMMC 分区扩容 patch (custom_target_amlogic_scripts.patch) 已经彻底废除，全面交由 LEDE 原生代码处理。

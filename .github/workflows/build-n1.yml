@@ -192,10 +192,10 @@ jobs:
             else
               TARGET_FEEDS="configs/feeds_${{ inputs.source_branch }}.conf"
             fi
-            
+          
             # 兜底的通用 feeds 配置文件
             DEFAULT_FEEDS="configs/feeds_istoreos.conf"
-            
+          
             if [ -f "$TARGET_FEEDS" ]; then
               echo "====== 匹配到分支专属 feeds 配置，开始注入: $TARGET_FEEDS ======"
               cp "$TARGET_FEEDS" openwrt/feeds.conf
@@ -484,6 +484,13 @@ jobs:
           exit 0
           EOF
           chmod +x $BASE_FILES/etc/rc.local
+
+          # --- 新增：仅针对 iStoreOS 在 /root 下建立 install-to-emmc.sh 的软链接 ---
+          if [ "$FIRMWARE_LOWER" == "istoreos" ]; then
+              echo "为 iStoreOS 创建 /root/install-to-emmc.sh 软链接..."
+              mkdir -p $BASE_FILES/root
+              ln -sf /usr/sbin/install-to-emmc.sh $BASE_FILES/root/install-to-emmc.sh
+          fi
 
       - name: Download Package & Compile
         run: |
