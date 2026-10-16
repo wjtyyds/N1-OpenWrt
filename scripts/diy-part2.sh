@@ -414,9 +414,8 @@ fi
 EOF
 fi
 
-# 第二部分：Sysctl 注入 (明确排除 iStoreOS)
-if [ "$FIRMWARE_TYPE" != "istoreos" ]; then
-    cat << 'EOF' >> ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
+# 第二部分：Sysctl 注入 (对所有固件生效)
+cat << 'EOF' >> ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
 
 # 2. 极致洁癖的 sysctl 注入
 sed -i '/net.bridge.bridge-nf-call/d' /etc/sysctl.conf
@@ -429,7 +428,6 @@ net.bridge.bridge-nf-call-arptables=0
 SYSCTL_EOF
 sysctl -p
 EOF
-fi
 
 # 第三部分：追加剩余公共逻辑与阅后即焚
 cat << 'EOF' >> ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
