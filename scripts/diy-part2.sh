@@ -292,6 +292,8 @@ elif [ "$FIRMWARE_TYPE" == "istoreos" ]; then
     git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
     git clone --depth 1 https://github.com/gdy666/luci-app-lucky.git package/custom/lucky
     clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
+    clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
+    clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
 
     if [ "$BUILD_TYPE" != "personal" ]; then
         git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
@@ -477,6 +479,17 @@ uci commit network
 
 # 2. 替换 root 密码为 password 的哈希值，跳过 iStoreOS 强制密码向导
 sed -i 's/^root:[^:]*:/root:\$1\$V4UetPzk\$CYXluq4wUazHjmCDBCqXF.:/' /etc/shadow
+
+# 【新增】：强制设置 iStoreOS 默认主题为 Aurora
+uci set luci.main.mediaurlbase='/luci-static/aurora' 2>/dev/null
+uci commit luci 2>/dev/null
+
+# 【新增】：精准配置 Aurora 为侧边栏并关闭快捷工具栏
+if [ -f /etc/config/aurora ]; then
+    uci set aurora.theme.nav_type='sidebar' 2>/dev/null
+    uci set aurora.theme.toolbar_enabled='0' 2>/dev/null
+    uci commit aurora 2>/dev/null
+fi
 
 # 3. 脚本执行完毕后自毁 (阅后即焚)
 rm -f /etc/uci-defaults/97_personal_setup
