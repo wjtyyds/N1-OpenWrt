@@ -425,7 +425,7 @@ jobs:
           make defconfig
 
       - name: Inject Binaries & Configs (原生编译前置注入)
-        if: startsWith(env.FIRMWARE_LOWER, 'lede') || env.FIRMWARE_LOWER == 'istoreos'
+        if: startsWith(env.FIRMWARE_LOWER, 'lede') || env.FIRMWARE_LOWER == 'istoreos' || env.FIRMWARE_LOWER == 'openwrt'
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_TOKEN }}
           PRIVATE_REPO: ${{ secrets.PRIVATE_REPO }}
