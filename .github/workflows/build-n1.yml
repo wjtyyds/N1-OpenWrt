@@ -340,10 +340,6 @@ jobs:
             echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
 
-            # 为 iStoreOS 注入 Samba/CIFS 挂载核心支持
-            echo "CONFIG_PACKAGE_kmod-fs-cifs=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_cifsmount=y" >> openwrt/.config
-
             if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
               # Public 专属科学与面板
               echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
