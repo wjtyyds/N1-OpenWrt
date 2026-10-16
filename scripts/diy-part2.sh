@@ -99,6 +99,51 @@ if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     cd $GITHUB_WORKSPACE/openwrt
     rm -rf /tmp/OpenClash
 
+    # ==========================================
+    # LEDE/LEDE-Native 专属性能与网络调优
+    # ==========================================
+    echo "====== 应用 LEDE 专属性能与网络调优 ======"
+    # 1. 修改默认 IP 为 192.168.1.99 防止冲突
+    sed -i '/lan) ipad=${ipaddr:-/s/${ipaddr:-"[^"]*"}/${ipaddr:-"192.168.1.99"}/' package/base-files/files/bin/config_generate || true
+
+    # 2. 默认禁用 WiFi (防止原生编译因驱动中断风暴卡死系统，首次开机有线进后台再开)
+    sed -i "s/disabled='0'/disabled='1'/g" package/kernel/mac80211/files/lib/wifi/mac80211.sh || true
+
+    # 3. Nginx 吞吐量优化
+    if [ -f feeds/packages/net/nginx-util/files/uci.conf.template ]; then
+        sed -i "s/large_client_header_buffers 2 1k/large_client_header_buffers 4 32k/g" feeds/packages/net/nginx-util/files/uci.conf.template
+        sed -i "s/client_max_body_size 128M/client_max_body_size 2048M/g" feeds/packages/net/nginx-util/files/uci.conf.template
+        sed -i '/client_max_body_size/a\tclient_body_buffer_size 8192M;' feeds/packages/net/nginx-util/files/uci.conf.template
+        sed -i '/client_max_body_size/a\tserver_names_hash_bucket_size 128;' feeds/packages/net/nginx-util/files/uci.conf.template
+    fi
+
+    if [ -f feeds/packages/net/nginx/files-luci-support/luci.locations ]; then
+        sed -ri "/luci-webui.socket/i\ \t\tuwsgi_send_timeout 600\;\n\t\tuwsgi_connect_timeout 600\;\n\t\tuwsgi_read_timeout 600\;" feeds/packages/net/nginx/files-luci-support/luci.locations
+        sed -ri "/luci-cgi_io.socket/i\ \t\tuwsgi_send_timeout 600\;\n\t\tuwsgi_connect_timeout 600\;\n\t\tuwsgi_read_timeout 600\;" feeds/packages/net/nginx/files-luci-support/luci.locations
+    fi
+
+    if [ -f feeds/packages/net/nginx/files-luci-support/60_nginx-luci-support ]; then
+        sed -i '/ubus_parallel_req/a\        ubus_script_timeout 600;' feeds/packages/net/nginx/files-luci-support/60_nginx-luci-support
+    fi
+
+    # 4. uWSGI 性能释放，解决后台卡顿
+    if [ -f feeds/packages/net/uwsgi/files-luci-support/luci-webui.ini ]; then
+        sed -i 's,buffer-size = 10000,buffer-size = 131072,g' feeds/packages/net/uwsgi/files-luci-support/luci-webui.ini
+        sed -i 's/threads = 1/threads = 2/g' feeds/packages/net/uwsgi/files-luci-support/luci-webui.ini
+        sed -i 's/processes = 3/processes = 4/g' feeds/packages/net/uwsgi/files-luci-support/luci-webui.ini
+        sed -i 's/cheaper = 1/cheaper = 2/g' feeds/packages/net/uwsgi/files-luci-support/luci-webui.ini
+        sed -i '$a cgi-timeout = 600' feeds/packages/net/uwsgi/files-luci-support/luci-*.ini || true
+    fi
+
+    # 5. rpcd 超时调整
+    if [ -f package/system/rpcd/files/rpcd.config ]; then
+        sed -i 's/option timeout 30/option timeout 60/g' package/system/rpcd/files/rpcd.config
+    fi
+    if [ -f feeds/luci/modules/luci-base/htdocs/luci-static/resources/rpc.js ]; then
+        sed -i 's#20) \* 1000#60) \* 1000#g' feeds/luci/modules/luci-base/htdocs/luci-static/resources/rpc.js
+    fi
+
+
     # 修复 LEDE 源码下 Aurora 主题页脚空括号问题
     echo "修复 LEDE Aurora 主题页脚空括号..."
     find package/custom/luci-theme-aurora -name "footer.ut" -exec sed -i 's/({{ version.distrevision }})/{% if (version.distrevision): %} ({{ version.distrevision }}){% endif %}/g' {} +
@@ -450,6 +495,13 @@ fi
 # =====================================================================
 
 cat << 'EOF' >> ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
+
+
+# 调整 CPU 调度策略为 schedutil，并拉高最低频率以保证性能
+uci set cpufreq.cpufreq.governor0='schedutil'
+uci set cpufreq.cpufreq.minfreq0='500000'
+uci set cpufreq.cpufreq.maxfreq0='1512000'
+uci commit cpufreq
 
 # 脚本使命完成，自毁
 rm -f /etc/uci-defaults/zz_custom_setup
