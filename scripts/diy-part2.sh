@@ -475,39 +475,46 @@ if [ "$FIRMWARE_TYPE" == "istoreos" ]; then
     cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/zzz_istoreos_setup
 #!/bin/sh
 
-# 1. 强制设为静态 IP 192.168.1.1，绝对保留原本的 br-lan 桥接不变
+# 1. 强制设为静态 IP 192.168.1.1，保留 br-lan，并彻底铲除 lan6 接口
 uci set network.lan.proto='static'
 uci set network.lan.ipaddr='192.168.1.1'
 uci set network.lan.netmask='255.255.255.0'
 uci delete network.lan.gateway 2>/dev/null
 uci delete network.lan.dns 2>/dev/null
+uci delete network.lan6 2>/dev/null
 uci commit network
 
-# 2. 强制开启 LAN 口的 DHCP 服务器，解决单网口设备不分配 IP 的问题
+# 2. 强制开启 LAN 口的 DHCP 服务器
 uci set dhcp.lan.ignore='0' 2>/dev/null
 uci set dhcp.lan.start='100' 2>/dev/null
 uci set dhcp.lan.limit='150' 2>/dev/null
 uci set dhcp.lan.leasetime='12h' 2>/dev/null
-# 针对 iStoreOS 新版单网口的 DHCPv4 禁用问题，强制开启
 uci set dhcp.lan.dhcpv4='server' 2>/dev/null
 uci commit dhcp
 
 # 3. 替换 root 密码为 password 的哈希值，跳过 iStoreOS 强制密码向导
 sed -i 's/^root:[^:]*:/root:\$1\$V4UetPzk\$CYXluq4wUazHjmCDBCqXF.:/' /etc/shadow
 
-# 4. 强制设置 iStoreOS 默认主题为 Aurora
+# 4. 强制设置 iStoreOS 默认主题为 Aurora，配置侧边栏并关闭快捷工具栏
 uci set luci.main.mediaurlbase='/luci-static/aurora' 2>/dev/null
 uci commit luci 2>/dev/null
-
-# 5. 精准配置 Aurora 为侧边栏并关闭快捷工具栏
 if [ -f /etc/config/aurora ]; then
     uci set aurora.theme.nav_type='sidebar' 2>/dev/null
     uci set aurora.theme.toolbar_enabled='0' 2>/dev/null
     uci commit aurora 2>/dev/null
 fi
 
-# 6. 重启网络服务，让刚刚修改的 IP 和 DHCP 立即生效
+# 5. 首次开机自动唤醒 WiFi，并修改 SSID 与密码
+# (开机时内核已探明硬件并生成了 wireless 文件，直接通过 UCI 修改首个无线节点)
+uci set wireless.@wifi-device[0].disabled='0' 2>/dev/null
+uci set wireless.@wifi-iface[0].ssid='Phicomm_n1' 2>/dev/null
+uci set wireless.@wifi-iface[0].encryption='psk2' 2>/dev/null
+uci set wireless.@wifi-iface[0].key='password' 2>/dev/null
+uci commit wireless 2>/dev/null
+
+# 6. 重启网络与无线服务，使 IP、DHCP 和 WiFi 配置立即生效
 /etc/init.d/network restart
+wifi reload 2>/dev/null
 
 # 7. 脚本执行完毕后自毁 (阅后即焚)
 rm -f /etc/uci-defaults/zzz_istoreos_setup
