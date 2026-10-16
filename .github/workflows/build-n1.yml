@@ -336,6 +336,10 @@ jobs:
             echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_luci-app-openclash=y" >> openwrt/.config
 
+            # 【新增】：为 iStoreOS 注入 Samba/CIFS 挂载核心支持
+            echo "CONFIG_PACKAGE_kmod-fs-cifs=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_cifsmount=y" >> openwrt/.config
+
             if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
               # Public 专属科学与面板
               echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
@@ -370,6 +374,12 @@ jobs:
             # 确保基础证书链存在
             echo "CONFIG_PACKAGE_ca-bundle=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_ca-certificates=y" >> openwrt/.config
+          fi
+          
+          # 【新增部分】：仅针对 iStoreOS 将直出镜像基础容量扩大到 4GB
+          if [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
+            echo "====== 将 iStoreOS 原生直出镜像分区从2G扩大到4G ======"
+            sed -i 's/2048/4096/g' openwrt/target/linux/amlogic/image/Makefile 2>/dev/null || true
           fi
           
           cd openwrt
