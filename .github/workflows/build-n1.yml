@@ -284,6 +284,51 @@ jobs:
             fi
           fi
           
+          # 针对 OpenWrt 体系写入基础插件与解耦逻辑
+          if [ "${{ env.FIRMWARE_LOWER }}" == "openwrt" ]; then
+            echo "====== 开始向 OpenWrt 体系动态注入选定插件 ======"
+
+            # 1. 基础积木 (白板已有 docker 引擎，无需 echo)
+            echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-lucky=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-openclash=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
+          
+            # 追加 Diskman 及其 lsblk 依赖
+            echo "CONFIG_PACKAGE_luci-app-diskman=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-diskman_INCLUDE_lsblk=y" >> openwrt/.config
+
+            # 追加 OpenWrt 专属的 TurboACC 及其子模块集成
+            echo "CONFIG_PACKAGE_luci-app-turboacc=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-turboacc_INCLUDE_OFFLOADING=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-turboacc_INCLUDE_BBR_CCA=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-turboacc_INCLUDE_NFT_FULLCONE=y" >> openwrt/.config
+
+            # 2. Public 专属套餐
+            if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
+              echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
+          
+              echo "CONFIG_PACKAGE_luci-app-passwall=y" >> openwrt/.config
+              # 严格遵守 OpenWrt 的 Nftables 规则
+              echo "CONFIG_PACKAGE_luci-app-passwall_Nftables_Transparent_Proxy=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Geoview=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Haproxy=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Hysteria=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_ShadowsocksR_Libev_Client=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_SingBox=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Geodata=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Plugin=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=y" >> openwrt/.config
+            fi
+          
+            # (Personal 的配置由 YAML 末尾的全局 sed 暴力断根统一接管，不在此画蛇添足)
+          fi
+          
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
             echo "====== 开始注入 Personal 版本专属强效断根指令 ======"
             # ... (保留原有的所有 Personal 版断根指令，不要动) ...

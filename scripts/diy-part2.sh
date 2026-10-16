@@ -436,10 +436,20 @@ cat << 'EOF' >> ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
 uci set AdGuardHome.AdGuardHome.binpath='/usr/bin/AdGuardHome/AdGuardHome' 2>/dev/null
 uci set AdGuardHome.AdGuardHome.workdir='/usr/bin/AdGuardHome' 2>/dev/null
 uci commit AdGuardHome 2>/dev/null
+EOF
+
+# ================= 专属修正：只给 LEDE 写入清理跑分任务 =================
+if [[ "$FIRMWARE_TYPE" == lede* ]]; then
+cat << 'EOF' >> ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
 
 # 4. 彻底清理 LEDE 祖传的跑分计划任务
 sed -i '/coremark/d' /etc/crontabs/root 2>/dev/null
 /etc/init.d/cron restart 2>/dev/null
+EOF
+fi
+# =====================================================================
+
+cat << 'EOF' >> ${FILES_DIR}/etc/uci-defaults/zz_custom_setup
 
 # 脚本使命完成，自毁
 rm -f /etc/uci-defaults/zz_custom_setup
