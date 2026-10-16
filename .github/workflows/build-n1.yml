@@ -231,8 +231,7 @@ jobs:
       - name: Load Configuration
         run: |
           CONF_NAME="${{ env.FIRMWARE_LOWER }}"
-          # 将 lede-native 统一定向为 lede
-          if [ "$CONF_NAME" == "lede-native" ]; then CONF_NAME="lede"; fi
+          # 直接使用对应的 config 文件，不再将 lede-native 强行替换为 lede
           cp configs/${CONF_NAME}.config openwrt/.config
           
           sed -i 's/CONFIG_KERNEL_DEBUG_INFO=y/# CONFIG_KERNEL_DEBUG_INFO is not set/g' openwrt/.config
@@ -250,7 +249,7 @@ jobs:
             if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
               echo "CONFIG_PACKAGE_kmod-phy-realtek=y" >> openwrt/.config
             fi
-            
+          
             echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
             echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
@@ -329,13 +328,10 @@ jobs:
               echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y" >> openwrt/.config
               echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=y" >> openwrt/.config
             fi
-          
-            # (Personal 的配置由 YAML 末尾的全局 sed 暴力断根统一接管，不在此画蛇添足)
           fi
           
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
             echo "====== 开始注入 Personal 版本专属强效断根指令 ======"
-            # ... (保留原有的所有 Personal 版断根指令，不要动) ...
             sed -i 's/CONFIG_PACKAGE_luci-app-dockerman=y/# CONFIG_PACKAGE_luci-app-dockerman is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_luci-lib-docker=y/# CONFIG_PACKAGE_luci-lib-docker is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_docker=y/# CONFIG_PACKAGE_docker is not set/g' openwrt/.config
