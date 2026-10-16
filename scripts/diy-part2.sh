@@ -459,11 +459,12 @@ rm -f /etc/uci-defaults/98_lede_setup
 EOF
 fi
 
-# ====== iStoreOS 专属 Personal 版设定 ======
+# ====== iStoreOS 修改默认原先配置设定 ======
 if [ "$FIRMWARE_TYPE" == "istoreos" ]; then
-    cat << EOF > ${FILES_DIR}/etc/uci-defaults/97_personal_setup
+    cat << 'EOF' > ${FILES_DIR}/etc/uci-defaults/97_personal_setup
 #!/bin/sh
-# 强制设为静态协议，指定 192.168.1.1
+
+# 1. 强制 LAN 口为静态 IP，指定 192.168.1.1，方便网线直连电脑进后台
 uci delete network.lan.type 2>/dev/null
 uci set network.lan.device='eth0'
 uci set network.lan.ifname='eth0'
@@ -472,37 +473,12 @@ uci delete network.lan.ipaddr
 uci add_list network.lan.ipaddr='192.168.1.1/24'
 uci delete network.lan.gateway 2>/dev/null
 uci delete network.lan.dns 2>/dev/null
-
-uci set network.wan=interface
-uci set network.wan.proto='pppoe'
-uci set network.wan.device='eth0'
-uci set network.wan.ifname='eth0'
-uci set network.wan.username='${PPPOE_USER}'
-uci set network.wan.password='${PPPOE_PASS}'
-uci set network.wan.ipv6='auto'
-uci set network.wan.norelease='1'
-uci set network.wan.multipath='off'
 uci commit network
 
-mkdir -p /etc/crontabs
-if ! grep -q "drop_caches" /etc/crontabs/root 2>/dev/null; then
-    echo "0 22 * * * sync; echo 3 > /proc/sys/vm/drop_caches" >> /etc/crontabs/root
-fi
-
-# 启用无线并设置 SSID 与密码
-uci set wireless.radio0.disabled=0 2>/dev/null
-uci set wireless.default_radio0.ssid='Phicomm_n1' 2>/dev/null
-uci set wireless.default_radio0.encryption='psk2' 2>/dev/null
-uci set wireless.default_radio0.key='password' 2>/dev/null
-uci commit wireless 2>/dev/null
-
-# 替换 root 密码为 password 的哈希值，跳过 iStoreOS 强制密码向导
+# 2. 替换 root 密码为 password 的哈希值，跳过 iStoreOS 强制密码向导
 sed -i 's/^root:[^:]*:/root:\$1\$V4UetPzk\$CYXluq4wUazHjmCDBCqXF.:/' /etc/shadow
 
-uci set AdGuardHome.AdGuardHome.configpath='/etc/AdGuardHome.yaml'
-uci commit AdGuardHome
-
-# 阅后即焚
+# 3. 脚本执行完毕后自毁 (阅后即焚)
 rm -f /etc/uci-defaults/97_personal_setup
 EOF
 
