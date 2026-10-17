@@ -155,14 +155,15 @@ if [ "$BUILD_TYPE" == "public" ]; then
     echo "【公共版】：已配置拉取完整代理编译组件..."
     
     # 根据用户规则：09.09 不拉 passwall 也不拉 dae；09.16 不拉 dae；10.11 全拉。
-    if [ "$TARGET_DATE_SIMPLE" != "2026.09.09" ]; then
-        clone_time_machine "https://github.com/Openwrt-Passwall/openwrt-passwall-packages" "passwall-packages" "$TARGET_DATE_ISO"
+    # 修改 Passwall 的判断条件：
+    if [[ "$TARGET_DATE_SIMPLE" != *"2026.09.09"* ]]; then
+        clone_time_machine "https://github.com/Openwrt-Passwall/openwrt-passwall-packages" "passwall-packages" "$TARGET_DATE_ISO" "true"
         clone_time_machine "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci" "$TARGET_DATE_ISO"
     fi
-    
-    if [ "$TARGET_DATE_SIMPLE" != "2026.09.09" ] && [ "$TARGET_DATE_SIMPLE" != "2026.09.16" ]; then
-        # daede 我们也用 hash 退回
-        clone_time_machine "https://github.com/kenzok8/openwrt-daede" "daede" "$TARGET_DATE_ISO" "true"
+
+    # 修改 Daede 的判断条件：
+    if [[ "$TARGET_DATE_SIMPLE" != *"2026.09.09"* ]] && [[ "$TARGET_DATE_SIMPLE" != *"2026.09.16"* ]]; then
+        clone_time_machine "https://github.com/kenzok8/openwrt-daede" "daede" "$TARGET_DATE_ISO"
     fi
 else
     echo "【私有版】：已阻断外部代理套件克隆..."
