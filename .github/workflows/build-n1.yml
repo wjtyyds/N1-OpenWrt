@@ -202,6 +202,7 @@ jobs:
           
           # 新增：注释掉 helloworld 软件源
           sed -i 's/^src-git helloworld/#src-git helloworld/g' feeds.conf.default
+          
       - name: Update & Install Feeds
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_TOKEN }}
@@ -233,27 +234,30 @@ jobs:
           # 🌟 Feeds 时光机：动态解析 feeds.conf 并替换为特定日期的 Hash
           if [ -n "$TARGET_DATE_ISO" ] && [ -f feeds.conf ]; then
               echo "⏳ 触发 Feeds 时光机，准备解析 feeds.conf (目标日期: $TARGET_DATE_ISO)..."
-              
+          
+              # 【修复点】：提前定义正则表达式变量，防止 bash 将分号 (;) 解析为命令结束符
+              FEED_REGEX="^src-git[[:space:]]+([a-zA-Z0-9_.-]+)[[:space:]]+([^;]+);(.*)$"
+          
               # 读取每一行并处理
               while IFS= read -r line; do
                   # 跳过注释和空行
                   [[ -z "$line" || "$line" == \#* ]] && continue
-                  
+          
                   # 判断是否为 src-git 并且包含分号分支 (例如: src-git name url;branch)
-                  if [[ "$line" =~ ^src-git[[:space:]]+([a-zA-Z0-9_.-]+)[[:space:]]+([^;]+);(.*)$ ]]; then
+                  if [[ "$line" =~ $FEED_REGEX ]]; then
                       feed_name="${BASH_REMATCH[1]}"
                       repo_url="${BASH_REMATCH[2]}"
                       branch_name="${BASH_REMATCH[3]}"
-                      
+          
                       echo "- 正在查询 [$feed_name] ($repo_url, 分支: $branch_name) 在 $TARGET_DATE_ISO 之前的 Hash..."
-                      
+          
                       # 提取 github api 路径
                       repo_path=$(echo "$repo_url" | sed -E 's|https://github.com/([^/]+/[^/.]+)(\.git)?|\1|')
-                      
+          
                       api_url="https://api.github.com/repos/$repo_path/commits?sha=$branch_name&until=$TARGET_DATE_ISO&per_page=1"
                       api_resp=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$api_url")
                       commit_hash=$(echo "$api_resp" | jq -r '.[0].sha' 2>/dev/null)
-                      
+          
                       if [ "$commit_hash" != "null" ] && [ -n "$commit_hash" ]; then
                           short_hash=${commit_hash:0:7}
                           echo "  ✅ 成功获取到 Hash: $short_hash"
