@@ -43,6 +43,9 @@ fi
 if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     echo "====== 开始执行 LEDE 专属定制 ======"
 
+    # 强制将 Amlogic 架构的默认内核从 6.18 改为 6.6
+    sed -i 's/KERNEL_PATCHVER:=6.18/KERNEL_PATCHVER:=6.6/g' target/linux/amlogic/Makefile
+    
     lede_conflict_plugins=(
         "adguardhome" "luci-app-adguardhome"
         "luci-app-openclash" "openclash"
