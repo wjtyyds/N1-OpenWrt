@@ -1,5 +1,5 @@
 name: Build N1 Firmware
-run-name: "📦 ${{ inputs.firmware_type }}${{ inputs.firmware_type == 'iStoreOS' && '-' || ' ' }}${{ inputs.source_branch }}${{ inputs.custom_tag != '' && format(' {0}', inputs.custom_tag) || '' }} ${{ inputs.firmware_type != 'Lede-Native' && inputs.firmware_type != 'iStoreOS' && format('| Kernel {0}-{1} ', inputs.kernel_version, inputs.kernel_builder == 'kernel_stable' && 'stable' || 'flippy') || '' }}${{ inputs.build_type == 'Personal' && ' | Personal' || '' }}${{ inputs.build_note != '' && format(' | {0}', inputs.build_note) || '' }}"
+run-name: "📦 ${{ inputs.firmware_type }} | ${{ inputs.source_branch }}${{ inputs.custom_tag != '' && format(' | {0}', inputs.custom_tag) || '' }}${{ inputs.firmware_type != 'Lede-Native' && inputs.firmware_type != 'iStoreOS' && format(' | {0}-{1}', inputs.kernel_version, inputs.kernel_builder == 'kernel_stable' && 'stable' || 'flippy') || '' }}${{ inputs.build_type == 'Personal' && ' | Personal' || '' }}${{ inputs.build_note != '' && format(' | {0}', inputs.build_note) || '' }}"
 on:
   workflow_dispatch:
     inputs:
@@ -22,19 +22,10 @@ on:
         options:
           - Public
           - Personal
-      build_note:
-        description: '编译备注 (直接附加在流水线名称与固件名末尾，例如填写: 测试Lucky新规则)'
-        required: false
-        default: ''
       source_branch:
-        description: '填写源码分支或 Tag (若是 lede，可直接填写 Rxx.xx.xx 当作标题)'
+        description: '填写源码分支或 Tag (若是 lede，可直接填写 master 当作分支)'
         required: true
         default: 'v25.12.5'
-      custom_tag:
-        description: '附加显示标签 (例如: R26.10.15，仅作标题显示和触发时光机)'
-        required: false
-        default: ''
-
       kernel_version:
         description: '打包内核版本 (注：若是原生编译则无需理会此项)'
         required: true
@@ -47,6 +38,14 @@ on:
         options:
           - kernel_flippy
           - kernel_stable
+      custom_tag:
+        description: '附加显示标签 (例如: R26.10.15，仅作标题显示和触发时光机)'
+        required: false
+        default: ''
+      build_note:
+        description: '编译备注 (直接附加在流水线名称与固件名末尾，例如填写: 测试Lucky新规则)'
+        required: false
+        default: ''
       export_config:
         description: '是否在 Release 中附带 .config 配置文件'
         required: false
@@ -124,14 +123,8 @@ jobs:
           
           elif [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
             REPO_URL="https://github.com/istoreos/istoreos.git"
-            # 智能补全分支前缀
-            if [[ "${{ inputs.source_branch }}" != istoreos-* ]]; then
-              BASE_BRANCH="istoreos-${{ inputs.source_branch }}"
-            else
-              BASE_BRANCH="${{ inputs.source_branch }}"
-            fi
+            BASE_BRANCH="${{ inputs.source_branch }}"
           
-            # 🌟 iStoreOS 专属时光机逻辑 🌟
             if [[ "$CUSTOM_TAG" =~ ^R([0-9]{2})\.([0-9]{2})\.([0-9]{2})$ ]]; then
               YEAR="20${BASH_REMATCH[1]}"
               MONTH="${BASH_REMATCH[2]}"
@@ -141,7 +134,6 @@ jobs:
               echo "TARGET_DATE_SIMPLE=20${BASH_REMATCH[1]}.${MONTH}.${DAY}" >> $GITHUB_ENV
           
               echo "⏳ 触发 iStoreOS 时光机：正在查找 $BASE_BRANCH 分支在 $TARGET_DATE 之前的最后一次提交..."
-              # 注意这里加了 sha=$BASE_BRANCH，确保从 25.12 分支获取历史，而不是 master
               API_URL="https://api.github.com/repos/istoreos/istoreos/commits?sha=$BASE_BRANCH&until=$TARGET_DATE&per_page=1"
               API_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$API_URL")
               TARGET_BRANCH=$(echo "$API_RESP" | jq -r '.[0].sha' 2>/dev/null)
@@ -157,8 +149,7 @@ jobs:
           elif [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
             REPO_URL="https://github.com/coolsnowwolf/lede"
           
-            # Lede 时光机逻辑 (因为 Lede 日期写在 source_branch 里)
-            if [[ "${{ inputs.source_branch }}" =~ ^R([0-9]{2})\.([0-9]{2})\.([0-9]{2})$ ]]; then
+            if [[ "$CUSTOM_TAG" =~ ^R([0-9]{2})\.([0-9]{2})\.([0-9]{2})$ ]]; then
               YEAR="20${BASH_REMATCH[1]}"
               MONTH="${BASH_REMATCH[2]}"
               DAY="${BASH_REMATCH[3]}"
@@ -166,20 +157,19 @@ jobs:
               echo "TARGET_DATE_ISO=$TARGET_DATE" >> $GITHUB_ENV
               echo "TARGET_DATE_SIMPLE=20${BASH_REMATCH[1]}.${MONTH}.${DAY}" >> $GITHUB_ENV
           
-              echo "⏳ 触发 Lede 时光机：查找 master 分支在 $TARGET_DATE 之前的最后一次提交..."
-              API_URL="https://api.github.com/repos/coolsnowwolf/lede/commits?until=$TARGET_DATE&per_page=1"
+              echo "⏳ 触发 Lede 时光机：查找 ${{ inputs.source_branch }} 分支在 $TARGET_DATE 之前的最后一次提交..."
+              API_URL="https://api.github.com/repos/coolsnowwolf/lede/commits?sha=${{ inputs.source_branch }}&until=$TARGET_DATE&per_page=1"
               API_RESP=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$API_URL")
               TARGET_BRANCH=$(echo "$API_RESP" | jq -r '.[0].sha' 2>/dev/null)
           
               if [ "$TARGET_BRANCH" == "null" ] || [ -z "$TARGET_BRANCH" ]; then
-                TARGET_BRANCH="master"
+                TARGET_BRANCH="${{ inputs.source_branch }}"
               fi
             else
               TARGET_BRANCH="${{ inputs.source_branch }}"
             fi
           fi
           
-          # 提取 OpenWrt / ImmortalWrt 的自定义 Tag 时间 (如果存在)
           if [ -n "$CUSTOM_TAG" ] && [[ "${{ env.FIRMWARE_LOWER }}" != lede* ]] && [ "${{ env.FIRMWARE_LOWER }}" != "istoreos" ]; then
               if [[ "$CUSTOM_TAG" =~ ^R([0-9]{2})\.([0-9]{2})\.([0-9]{2})$ ]]; then
                   YEAR="20${BASH_REMATCH[1]}"
@@ -200,7 +190,6 @@ jobs:
           CURRENT_HASH=$(git log -1 --format="%h")
           echo "✅ 源码已成功锁定至哈希: $CURRENT_HASH"
           
-          # 新增：注释掉 helloworld 软件源
           sed -i 's/^src-git helloworld/#src-git helloworld/g' feeds.conf.default
 
       - name: Update & Install Feeds
@@ -208,14 +197,13 @@ jobs:
           GH_TOKEN: ${{ secrets.PRIVATE_TOKEN }}
         run: |
           if [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
-            # 智能补全：如果用户只填了版本号，底层自动加上 istoreos- 前缀
-            if [[ "${{ inputs.source_branch }}" != istoreos-* ]]; then
-              TARGET_FEEDS="configs/feeds_istoreos-${{ inputs.source_branch }}.conf"
+            if [[ "${{ inputs.source_branch }}" =~ ^(istoreos-[0-9]+\.[0-9]+) ]]; then
+              BASE_FEED_VER="${BASH_REMATCH[1]}"
+              TARGET_FEEDS="configs/feeds_${BASE_FEED_VER}.conf"
             else
               TARGET_FEEDS="configs/feeds_${{ inputs.source_branch }}.conf"
             fi
           
-            # 兜底的通用 feeds 配置文件
             DEFAULT_FEEDS="configs/feeds_istoreos.conf"
           
             if [ -f "$TARGET_FEEDS" ]; then
@@ -231,19 +219,14 @@ jobs:
           
           cd openwrt
           
-          # 🌟 Feeds 时光机：动态解析 feeds.conf 并替换为特定日期的 Hash
           if [ -n "$TARGET_DATE_ISO" ] && [ -f feeds.conf ]; then
               echo "⏳ 触发 Feeds 时光机，准备解析 feeds.conf (目标日期: $TARGET_DATE_ISO)..."
           
-              # 【修复点】：提前定义正则表达式变量，防止 bash 将分号 (;) 解析为命令结束符
               FEED_REGEX="^src-git[[:space:]]+([a-zA-Z0-9_.-]+)[[:space:]]+([^;]+);(.*)$"
           
-              # 读取每一行并处理
               while IFS= read -r line; do
-                  # 跳过注释和空行
                   [[ -z "$line" || "$line" == \#* ]] && continue
           
-                  # 判断是否为 src-git 并且包含分号分支 (例如: src-git name url;branch)
                   if [[ "$line" =~ $FEED_REGEX ]]; then
                       feed_name="${BASH_REMATCH[1]}"
                       repo_url="${BASH_REMATCH[2]}"
@@ -251,7 +234,6 @@ jobs:
           
                       echo "- 正在查询 [$feed_name] ($repo_url, 分支: $branch_name) 在 $TARGET_DATE_ISO 之前的 Hash..."
           
-                      # 提取 github api 路径
                       repo_path=$(echo "$repo_url" | sed -E 's|https://github.com/([^/]+/[^/.]+)(\.git)?|\1|')
           
                       api_url="https://api.github.com/repos/$repo_path/commits?sha=$branch_name&until=$TARGET_DATE_ISO&per_page=1"
@@ -261,8 +243,6 @@ jobs:
                       if [ "$commit_hash" != "null" ] && [ -n "$commit_hash" ]; then
                           short_hash=${commit_hash:0:7}
                           echo "  ✅ 成功获取到 Hash: $short_hash"
-                          # 动态替换配置文件中的整行
-                          # 将 "src-git name url;branch" 替换为 "src-git name url^hash"
                           escaped_url=$(echo "$repo_url" | sed 's/[./*?|]/\\&/g')
                           sed -i "s|^src-git[[:space:]]*$feed_name[[:space:]]*$escaped_url;$branch_name$|src-git $feed_name $repo_url^$commit_hash|g" feeds.conf
                       else
@@ -296,7 +276,6 @@ jobs:
         run: |
           CONF_NAME="${{ env.FIRMWARE_LOWER }}"
           
-          # 判断文件是否存在：如果 lede-native.config 不存在，就自动回退使用 lede.config
           if [ ! -f "configs/${CONF_NAME}.config" ] && [[ "${CONF_NAME}" == "lede-native" ]]; then
             echo "未找到 lede-native.config，降级使用共用的 lede.config..."
             cp configs/lede.config openwrt/.config
@@ -305,7 +284,6 @@ jobs:
             cp configs/${CONF_NAME}.config openwrt/.config
           fi
           
-          # 1. 全局配置修剪 (共用)
           sed -i 's/CONFIG_KERNEL_DEBUG_INFO=y/# CONFIG_KERNEL_DEBUG_INFO is not set/g' openwrt/.config
           sed -i 's/CONFIG_KERNEL_DEBUG_KERNEL=y/# CONFIG_KERNEL_DEBUG_KERNEL is not set/g' openwrt/.config
           sed -i 's/CONFIG_GDB=y/# CONFIG_GDB is not set/g' openwrt/.config
@@ -314,7 +292,6 @@ jobs:
           echo "CONFIG_DEVEL=y" >> openwrt/.config
           echo "CONFIG_BPF_TOOLCHAIN_HOST=y" >> openwrt/.config
 
-          # 2. 公共基础插件注入 (所有分支通用)
           echo "====== 注入全局基础定制插件 ======"
           cat >> openwrt/.config <<EOF
           CONFIG_PACKAGE_luci-theme-aurora=y
@@ -325,7 +302,6 @@ jobs:
           CONFIG_PACKAGE_luci-app-oaf=y
           EOF
 
-          # 3. 各大分支专属差异定制
           if [[ "${CONF_NAME}" == lede* ]]; then
             if [ "${CONF_NAME}" == "lede-native" ]; then
               sed -i 's/CONFIG_LINUX_6_18=y/# CONFIG_LINUX_6_18 is not set/g' openwrt/.config
@@ -342,8 +318,7 @@ jobs:
               sed -i '/CONFIG_TARGET_IMAGES_GZIP/d' openwrt/.config
               sed -i '/CONFIG_TARGET_ROOTFS_PARTSIZE/d' openwrt/.config
             fi
-            
-            # LEDE ssl bugfix
+          
             sed -i 's/CONFIG_PACKAGE_libustream-openssl=y/# CONFIG_PACKAGE_libustream-openssl is not set/g' openwrt/.config
             sed -i 's/CONFIG_DEFAULT_libustream-openssl=y/# CONFIG_DEFAULT_libustream-openssl is not set/g' openwrt/.config
             cat >> openwrt/.config <<EOF
@@ -364,13 +339,10 @@ jobs:
           EOF
           fi
 
-          # 4. Public 与 Personal 构建目标分支
           if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
             echo "====== 注入 Public 科学套件 ======"
-            
-            # 🌟 YML 时光机：根据日期决定是否回退/屏蔽特定组件
+          
             if [[ "${{ env.TARGET_DATE_SIMPLE }}" != "2026.09.09" ]]; then
-              # 09.09 没有 Passwall，09.16 及以后才有
               cat >> openwrt/.config <<EOF
           CONFIG_PACKAGE_luci-app-passwall=y
           CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Geoview=y
@@ -384,7 +356,6 @@ jobs:
           CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y
           CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=y
           EOF
-              # Passwall 防火墙引擎差异判断
               if [[ "${CONF_NAME}" == lede* ]]; then
                  echo "CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy=y" >> openwrt/.config
               else
@@ -393,7 +364,6 @@ jobs:
             fi
 
             if [[ "${{ env.TARGET_DATE_SIMPLE }}" != "2026.09.09" ]] && [[ "${{ env.TARGET_DATE_SIMPLE }}" != "2026.09.16" ]]; then
-              # 09.09 和 09.16 都没有 dae，10.11 及以后才有
               cat >> openwrt/.config <<EOF
           CONFIG_PACKAGE_luci-app-daede=y
           CONFIG_PACKAGE_dae=y
@@ -470,9 +440,9 @@ jobs:
           echo "提取 OpenClash Meta (融入时光机)..."
           if [ -n "$TARGET_DATE_ISO" ]; then
               CORE_HASH=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/vernesong/OpenClash/commits?sha=core&until=$TARGET_DATE_ISO&per_page=1" | jq -r '.[0].sha')
-              if [ "$CORE_HASH" == "null" ] || [ -z "$CORE_HASH" ]; then CORE_HASH="master"; fi
+              if [ "$CORE_HASH" == "null" ] || [ -z "$CORE_HASH" ]; then CORE_HASH="core"; fi
           else
-              CORE_HASH="master"
+              CORE_HASH="core"
           fi
           
           META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/${CORE_HASH}/master/meta/clash-linux-arm64.tar.gz"
@@ -549,7 +519,6 @@ jobs:
           EOF
           chmod +x $BASE_FILES/etc/rc.local
           
-          # --- 新增：仅针对 iStoreOS 在 /root 下建立 install-to-emmc.sh 的软链接 ---
           if [ "$FIRMWARE_LOWER" == "istoreos" ]; then
               echo "为 iStoreOS 创建 /root/install-to-emmc.sh 软链接..."
               mkdir -p $BASE_FILES/root
@@ -583,6 +552,8 @@ jobs:
           if [ "${{ inputs.kernel_builder }}" == "kernel_stable" ]; then
             sudo mv /opt/kernel/${{ inputs.kernel_version }}/* /opt/kernel/
           fi
+          
+          # 获取内核全名 (提取 boot- 后面的所有字符)
           REAL_KERNEL_VER=$(ls /opt/kernel/boot-* | head -n 1 | sed -e 's|.*/boot-||' -e 's/\.tar\.gz//' -e 's/\.tar//')
           
           if [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
@@ -629,7 +600,6 @@ jobs:
           
           sudo gunzip -f ./openwrt-armvirt-64-default-rootfs.tar.gz
           
-          # ====== 恢复：修复 F大打包模式下安装 eMMC 文件的软链接 ======
           if tar -O -xf ./openwrt-armvirt-64-default-rootfs.tar etc/os-release usr/lib/os-release etc/openwrt_release 2>/dev/null | grep -qiE '^OPENWRT_RELEASE="?LEDE' || tar -tf ./openwrt-armvirt-64-default-rootfs.tar | grep -q -E '^\.?/?root/install-to-emmc.sh$'; then
               sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar root/install-to-emmc.sh 2>/dev/null || true
               sudo tar --delete -f ./openwrt-armvirt-64-default-rootfs.tar ./root/install-to-emmc.sh 2>/dev/null || true
@@ -692,14 +662,25 @@ jobs:
           source packit/make.env
           DATETIME=$(date +'%Y%m%d%H%M')
           
-          # 处理文件名中的版本与 Tag
-          if [ -n "$CUSTOM_TAG" ] && [[ "${{ env.FIRMWARE_LOWER }}" != lede* ]]; then
-             DISPLAY_VER="${OPENWRT_VER}-${CUSTOM_TAG}"
+          if [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
+             if [ -n "$CUSTOM_TAG" ]; then
+                DISPLAY_VER="$CUSTOM_TAG"
+             else
+                DISPLAY_VER="${OPENWRT_VER}"
+             fi
           else
-             DISPLAY_VER="${OPENWRT_VER}"
+             if [ -n "$CUSTOM_TAG" ]; then
+                DISPLAY_VER="${OPENWRT_VER}-${CUSTOM_TAG}"
+             else
+                DISPLAY_VER="${OPENWRT_VER}"
+             fi
           fi
           
-          # 处理编译备注后缀 (将空格替换为下划线，防止破坏文件名)
+          CLEAN_VER="${DISPLAY_VER}"
+          if [[ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]] && [[ "$CLEAN_VER" == istoreos-* ]]; then
+              CLEAN_VER="${CLEAN_VER#istoreos-}"
+          fi
+          
           NOTE_SUFFIX=""
           if [ -n "$BUILD_NOTE" ]; then
              SAFE_NOTE=$(echo "$BUILD_NOTE" | sed 's/[[:space:]]/_/g')
@@ -707,14 +688,14 @@ jobs:
           fi
           
           for img in packit/output/*.img.gz; do
-          # 删除了 -sfs 的判断逻辑，直接让时间戳和备注相连
-             base_name="${{ env.FIRMWARE_LOWER }}-${DISPLAY_VER}-k${KERNEL_VERSION}_${DATETIME}${NOTE_SUFFIX}"
+             base_name="${{ env.FIRMWARE_LOWER }}-${CLEAN_VER}-${KERNEL_VERSION}_${DATETIME}${NOTE_SUFFIX}"
              new_img_name="${base_name}.img.gz"
              cp "$img" "release_files/$new_img_name"
              echo "✅ 准备发布镜像: $new_img_name"
           done
           
           if [ "${{ inputs.export_config }}" == "true" ]; then
+            echo "✅ 附带输出 .config 配置文件: ${base_name}.config"
             cp openwrt/.config "release_files/${base_name}.config"
           fi
           
@@ -728,17 +709,10 @@ jobs:
             echo "正在为 Personal 固件进行 7z AES-256 加密打包..."
             7z a -p"$ZIP_PASS" -mhe=on "${base_name}.7z" *
             find . -type f -not -name '*.7z' -delete
-          else
-            if [ "${{ inputs.export_config }}" == "true" ]; then
-              echo "公共版开启了 config 导出，正在打包为无密码的 7z 压缩包..."
-              7z a "${base_name}.7z" *
-              find . -type f -not -name '*.7z' -delete
-            fi
           fi
           
           BRANCH_NAME="${{ github.ref_name }}"
           
-          # 🌟 最终 Release 名称与标签：优先使用 TARGET_DATE_SIMPLE
           if [ -n "${{ env.TARGET_DATE_SIMPLE }}" ]; then
               BUILD_DATE="v${{ env.TARGET_DATE_SIMPLE }}"
           else
