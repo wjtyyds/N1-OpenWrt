@@ -122,10 +122,10 @@ fi
 # 3. 统一拉取：共用的第三方基础插件库 (全局生效，带时光机)
 # ==========================================
 echo "====== 统一拉取定制基础插件源码 ======"
-# AdGuardHome 不好抓 Tag，强制使用 Hash 模式 ("true" 作为第 4 个参数)
-clone_time_machine "https://github.com/wjtyyds/luci-app-adguardhome" "luci-app-adguardhome" "$TARGET_DATE_ISO" "true"
+# 1. 移除 AdGuardHome 的目标日期变量和 Hash 强制参数，使其跳过时光机直接拉取最新状态
+clone_time_machine "https://github.com/wjtyyds/luci-app-adguardhome" "luci-app-adguardhome" ""
 clone_time_machine "https://github.com/gdy666/luci-app-lucky" "lucky" "$TARGET_DATE_ISO"
-clone_time_machine "https://github.com/destan19/OpenAppFilter" "luci-app-oaf" "$TARGET_DATE_ISO" "true"
+clone_time_machine "https://github.com/destan19/OpenAppFilter" "luci-app-oaf" "$TARGET_DATE_ISO"
 clone_time_machine "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora" "$TARGET_DATE_ISO"
 clone_time_machine "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config" "$TARGET_DATE_ISO"
 

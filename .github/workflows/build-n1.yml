@@ -202,7 +202,7 @@ jobs:
           
           # 新增：注释掉 helloworld 软件源
           sed -i 's/^src-git helloworld/#src-git helloworld/g' feeds.conf.default
-          
+
       - name: Update & Install Feeds
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_TOKEN }}
@@ -475,7 +475,7 @@ jobs:
               CORE_HASH="master"
           fi
           
-          META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/${CORE_HASH}/meta/clash-linux-arm64.tar.gz"
+          META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/${CORE_HASH}/master/meta/clash-linux-arm64.tar.gz"
           echo "✅ 锁定 Meta Core 链接: $META_URL"
           wget -qO /tmp/clash_meta.tar.gz "$META_URL" || true
           if [ -f /tmp/clash_meta.tar.gz ]; then
