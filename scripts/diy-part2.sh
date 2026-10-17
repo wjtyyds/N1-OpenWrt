@@ -139,21 +139,37 @@ else
     clone_time_machine "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config" "$TARGET_DATE_ISO"
 fi
 
-# 统一：OpenClash 浅克隆 (融入时光机逻辑)
+# 统一：OpenClash 浅克隆 (融入时光机逻辑，严格基于原生 Tag)
 OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
 echo "正在获取 OpenClash..."
+
 if [ -n "$TARGET_DATE_ISO" ]; then
-    OPENCLASH_RELEASES=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/vernesong/OpenClash/releases?per_page=30")
-    OPENCLASH_TAG=$(echo "$OPENCLASH_RELEASES" | jq -r --arg date "$TARGET_DATE_ISO" 'map(select(.published_at < $date)) | .[0].tag_name // empty')
+    echo "🔍 [时光机] 正在使用原生 Git 检索 $TARGET_DATE_ISO 之前的最新 Tag..."
+    # 1. 创建无文件极速克隆，获取完整的提交历史与 Tag 树
+    git clone --filter=blob:none "$OPENCLASH_REPO" /tmp/oc_history_tmp >/dev/null 2>&1
+    cd /tmp/oc_history_tmp
+
+    # 2. 原生 Git 逻辑：完美复刻肉眼查找，寻找目标时间前最后一次打过 Tag 的记录
+    OPENCLASH_TAG=$(git log --tags --until="$TARGET_DATE_ISO" --simplify-by-decoration --format="%D" | grep "tag: " | head -n 1 | sed -E 's/.*tag: ([^, )]+).*/\1/')
+    cd $GITHUB_WORKSPACE/openwrt
+    rm -rf /tmp/oc_history_tmp
+
+    if [ -n "$OPENCLASH_TAG" ]; then
+        echo "🎉 [时光机] 精准锁定！找到历史 Tag: $OPENCLASH_TAG"
+    else
+        echo "⚠️ [时光机] 指定日期前未找到任何 Tag，降级拉取最新 master..."
+        OPENCLASH_TAG="master"
+    fi
 else
-    OPENCLASH_TAG=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    # 兜底：直接拉取最新
+    OPENCLASH_TAG="master"
+    echo "👉 [常规拉取] OpenClash 锁定于: 最新 master"
 fi
-echo "[时光机] OpenClash 锁定于: ${OPENCLASH_TAG:-最新 master}"
 
 mkdir -p /tmp/OpenClash && cd /tmp/OpenClash
 git init; git remote add origin "$OPENCLASH_REPO"; git config core.sparseCheckout true
 echo "luci-app-openclash/*" >> .git/info/sparse-checkout
-git pull --depth 1 origin "${OPENCLASH_TAG:-master}"
+git pull --depth 1 origin "$OPENCLASH_TAG"
 mv luci-app-openclash $GITHUB_WORKSPACE/openwrt/package/custom/
 cd $GITHUB_WORKSPACE/openwrt
 rm -rf /tmp/OpenClash
