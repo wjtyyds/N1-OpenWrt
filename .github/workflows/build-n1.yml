@@ -250,57 +250,58 @@ jobs:
           
           # 针对 Lede 体系(包含原 lede-native) 写入白纸基础插件
           if [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
-          echo "====== 开始向 Lede 体系注入选定插件 ======"
+            echo "====== 开始向 Lede 体系注入选定插件 ======"
           
-          # 【精准区分】：仅针对原生编译 (lede-native) 的底层核心修正
-          if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
-            echo "====== Lede-Native 原生编译配置动态修正 ======"
-
-          
-            # 1. 强力锁定 6.6 内核 (防篡改双重保险，配合 diy-part2.sh 使用)
-            sed -i 's/CONFIG_LINUX_6_18=y/# CONFIG_LINUX_6_18 is not set/g' openwrt/.config
-            sed -i 's/CONFIG_LINUX_6_12=y/# CONFIG_LINUX_6_12 is not set/g' openwrt/.config
-            echo "CONFIG_LINUX_6_6=y" >> openwrt/.config
-          
-            # 2. 修复 6.6 下 mac80211/usb.c 编译报错 (N1只用SDIO，彻底割掉多余的USB无线驱动)
-            sed -i 's/CONFIG_PACKAGE_brcmfmac-firmware-usb=y/# CONFIG_PACKAGE_brcmfmac-firmware-usb is not set/g' openwrt/.config
-            sed -i 's/CONFIG_BRCMFMAC_USB=y/# CONFIG_BRCMFMAC_USB is not set/g' openwrt/.config
-          fi
+            # 【精准区分】：仅针对原生编译 (lede-native) 的底层核心修正
+            if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
+              echo "====== Lede-Native 原生编译配置动态修正 ======"
+  
+            
+              # 1. 强力锁定 6.6 内核 (防篡改双重保险，配合 diy-part2.sh 使用)
+              sed -i 's/CONFIG_LINUX_6_18=y/# CONFIG_LINUX_6_18 is not set/g' openwrt/.config
+              sed -i 's/CONFIG_LINUX_6_12=y/# CONFIG_LINUX_6_12 is not set/g' openwrt/.config
+              echo "CONFIG_LINUX_6_6=y" >> openwrt/.config
+            
+              # 2. 修复 6.6 下 mac80211/usb.c 编译报错 (N1只用SDIO，彻底割掉多余的USB无线驱动)
+              sed -i 's/CONFIG_PACKAGE_brcmfmac-firmware-usb=y/# CONFIG_PACKAGE_brcmfmac-firmware-usb is not set/g' openwrt/.config
+              sed -i 's/CONFIG_BRCMFMAC_USB=y/# CONFIG_BRCMFMAC_USB is not set/g' openwrt/.config
+            fi
                
-          echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
-          echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
-          echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
-          echo "CONFIG_PACKAGE_luci-app-lucky=y" >> openwrt/.config
-          echo "CONFIG_PACKAGE_luci-app-openclash=y" >> openwrt/.config
-          echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-lucky=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-openclash=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
           
-          if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
-            echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-passwall=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Geoview=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Haproxy=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Hysteria=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_ShadowsocksR_Libev_Client=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_SingBox=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Geodata=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Plugin=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=y" >> openwrt/.config
-          fi
+            if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
+              echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Geoview=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Haproxy=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Hysteria=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_ShadowsocksR_Libev_Client=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_SingBox=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Geodata=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Plugin=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=y" >> openwrt/.config
+            fi
           
-          # ====== 注意：修复 F大的打包配置 ======
-          if [ "${{ env.FIRMWARE_LOWER }}" == "lede" ]; then
-            echo "====== 修正 Lede 为 F大打包模式 (生成 tar.gz, 关闭 ext4) ======"
-            sed -i 's/# CONFIG_TARGET_ROOTFS_TARGZ is not set/CONFIG_TARGET_ROOTFS_TARGZ=y/g' openwrt/.config
-            echo "CONFIG_TARGET_ROOTFS_TARGZ=y" >> openwrt/.config
-            sed -i 's/CONFIG_TARGET_ROOTFS_EXT4FS=y/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/g' openwrt/.config
-            sed -i 's/CONFIG_TARGET_ROOTFS_SQUASHFS=y/# CONFIG_TARGET_ROOTFS_SQUASHFS is not set/g' openwrt/.config
-            sed -i '/CONFIG_TARGET_EXT4_/d' openwrt/.config
-            sed -i '/CONFIG_TARGET_IMAGES_GZIP/d' openwrt/.config
-            sed -i '/CONFIG_TARGET_ROOTFS_PARTSIZE/d' openwrt/.config
+            # ====== 注意：修复 F大的打包配置 ======
+            if [ "${{ env.FIRMWARE_LOWER }}" == "lede" ]; then
+              echo "====== 修正 Lede 为 F大打包模式 (生成 tar.gz, 关闭 ext4) ======"
+              sed -i 's/# CONFIG_TARGET_ROOTFS_TARGZ is not set/CONFIG_TARGET_ROOTFS_TARGZ=y/g' openwrt/.config
+              echo "CONFIG_TARGET_ROOTFS_TARGZ=y" >> openwrt/.config
+              sed -i 's/CONFIG_TARGET_ROOTFS_EXT4FS=y/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/g' openwrt/.config
+              sed -i 's/CONFIG_TARGET_ROOTFS_SQUASHFS=y/# CONFIG_TARGET_ROOTFS_SQUASHFS is not set/g' openwrt/.config
+              sed -i '/CONFIG_TARGET_EXT4_/d' openwrt/.config
+              sed -i '/CONFIG_TARGET_IMAGES_GZIP/d' openwrt/.config
+              sed -i '/CONFIG_TARGET_ROOTFS_PARTSIZE/d' openwrt/.config
+            fi
           fi
           
           # 针对 OpenWrt 体系写入基础插件与解耦逻辑
