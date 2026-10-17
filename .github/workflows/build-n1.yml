@@ -699,17 +699,11 @@ jobs:
           fi
           
           for img in packit/output/*.img.gz; do
-            ORIG_NAME=$(basename "$img")
-            FORMAT_SUFFIX=""
-            if echo "$ORIG_NAME" | grep -q -E "squashfs|sfs"; then
-              FORMAT_SUFFIX="-sfs"
-            fi
-          
-            # 拼接最终名称，将 NOTE_SUFFIX 放在 img.gz 前面
-            base_name="${{ env.FIRMWARE_LOWER }}-${DISPLAY_VER}-k${KERNEL_VERSION}_${DATETIME}${FORMAT_SUFFIX}${NOTE_SUFFIX}"
-            new_img_name="${base_name}.img.gz"
-            cp "$img" "release_files/$new_img_name"
-            echo "✅ 准备发布镜像: $new_img_name"
+          # 删除了 -sfs 的判断逻辑，直接让时间戳和备注相连
+             base_name="${{ env.FIRMWARE_LOWER }}-${DISPLAY_VER}-k${KERNEL_VERSION}_${DATETIME}${NOTE_SUFFIX}"
+             new_img_name="${base_name}.img.gz"
+             cp "$img" "release_files/$new_img_name"
+             echo "✅ 准备发布镜像: $new_img_name"
           done
           
           if [ "${{ inputs.export_config }}" == "true" ]; then
