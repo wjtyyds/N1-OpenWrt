@@ -1,5 +1,5 @@
 name: Build N1 Firmware
-run-name: "📦 ${{ inputs.firmware_type }}${{ inputs.firmware_type == 'iStoreOS' && '-' || ' ' }}${{ inputs.source_branch }}${{ inputs.custom_tag != '' && format(' {0}', inputs.custom_tag) || '' }} ${{ inputs.firmware_type != 'Lede-Native' && inputs.firmware_type != 'iStoreOS' && format('| Kernel {0}-{1} ', inputs.kernel_version, inputs.kernel_builder == 'kernel_stable' && 'stable' || 'flippy') || '' }}| ${{ inputs.build_type }}${{ inputs.build_note != '' && format(' | {0}', inputs.build_note) || '' }}"
+run-name: "📦 ${{ inputs.firmware_type }}${{ inputs.firmware_type == 'iStoreOS' && '-' || ' ' }}${{ inputs.source_branch }}${{ inputs.custom_tag != '' && format(' {0}', inputs.custom_tag) || '' }} ${{ inputs.firmware_type != 'Lede-Native' && inputs.firmware_type != 'iStoreOS' && format('| Kernel {0}-{1} ', inputs.kernel_version, inputs.kernel_builder == 'kernel_stable' && 'stable' || 'flippy') || '' }}${{ inputs.build_type == 'Personal' && ' | Personal' || '' }}${{ inputs.build_note != '' && format(' | {0}', inputs.build_note) || '' }}"
 on:
   workflow_dispatch:
     inputs:
@@ -241,59 +241,33 @@ jobs:
             cp configs/${CONF_NAME}.config openwrt/.config
           fi
           
+          # 1. 全局配置修剪 (共用)
           sed -i 's/CONFIG_KERNEL_DEBUG_INFO=y/# CONFIG_KERNEL_DEBUG_INFO is not set/g' openwrt/.config
           sed -i 's/CONFIG_KERNEL_DEBUG_KERNEL=y/# CONFIG_KERNEL_DEBUG_KERNEL is not set/g' openwrt/.config
           sed -i 's/CONFIG_GDB=y/# CONFIG_GDB is not set/g' openwrt/.config
-          
-          sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client is not set/g' openwrt/.config
-          sed -i 's/CONFIG_PACKAGE_shadowsocks-rust-sslocal=y/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/g' openwrt/.config
-          
-          # 针对 Lede 体系(包含原 lede-native) 写入白纸基础插件
-          if [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
-            echo "====== 开始向 Lede 体系注入选定插件 ======"
-          
-            # 【精准区分】：仅针对原生编译 (lede-native) 的底层核心修正
-            if [ "${{ env.FIRMWARE_LOWER }}" == "lede-native" ]; then
-              echo "====== Lede-Native 原生编译配置动态修正 ======"
-  
-            
-              # 1. 强力锁定 6.6 内核 (防篡改双重保险，配合 diy-part2.sh 使用)
+          echo "CONFIG_DEVEL=y" >> openwrt/.config
+          echo "CONFIG_BPF_TOOLCHAIN_HOST=y" >> openwrt/.config
+
+          # 2. 公共基础插件注入 (所有分支通用)
+          echo "====== 注入全局基础定制插件 ======"
+          cat >> openwrt/.config <<EOF
+          CONFIG_PACKAGE_luci-theme-aurora=y
+          CONFIG_PACKAGE_luci-app-aurora-config=y
+          CONFIG_PACKAGE_luci-app-adguardhome=y
+          CONFIG_PACKAGE_luci-app-lucky=y
+          CONFIG_PACKAGE_luci-app-openclash=y
+          CONFIG_PACKAGE_luci-app-oaf=y
+          EOF
+
+          # 3. 各大分支专属差异定制
+          if [[ "${CONF_NAME}" == lede* ]]; then
+            if [ "${CONF_NAME}" == "lede-native" ]; then
               sed -i 's/CONFIG_LINUX_6_18=y/# CONFIG_LINUX_6_18 is not set/g' openwrt/.config
               sed -i 's/CONFIG_LINUX_6_12=y/# CONFIG_LINUX_6_12 is not set/g' openwrt/.config
               echo "CONFIG_LINUX_6_6=y" >> openwrt/.config
-            
-              # 2. 修复 6.6 下 mac80211/usb.c 编译报错 (N1只用SDIO，彻底割掉多余的USB无线驱动)
               sed -i 's/CONFIG_PACKAGE_brcmfmac-firmware-usb=y/# CONFIG_PACKAGE_brcmfmac-firmware-usb is not set/g' openwrt/.config
               sed -i 's/CONFIG_BRCMFMAC_USB=y/# CONFIG_BRCMFMAC_USB is not set/g' openwrt/.config
-            fi
-               
-            echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-lucky=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-openclash=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
-          
-            if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
-              echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Geoview=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Haproxy=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Hysteria=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_ShadowsocksR_Libev_Client=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_SingBox=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Geodata=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Plugin=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=y" >> openwrt/.config
-            fi
-          
-            # ====== 注意：修复 F大的打包配置 ======
-            if [ "${{ env.FIRMWARE_LOWER }}" == "lede" ]; then
-              echo "====== 修正 Lede 为 F大打包模式 (生成 tar.gz, 关闭 ext4) ======"
+            elif [ "${CONF_NAME}" == "lede" ]; then
               sed -i 's/# CONFIG_TARGET_ROOTFS_TARGZ is not set/CONFIG_TARGET_ROOTFS_TARGZ=y/g' openwrt/.config
               echo "CONFIG_TARGET_ROOTFS_TARGZ=y" >> openwrt/.config
               sed -i 's/CONFIG_TARGET_ROOTFS_EXT4FS=y/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/g' openwrt/.config
@@ -302,89 +276,54 @@ jobs:
               sed -i '/CONFIG_TARGET_IMAGES_GZIP/d' openwrt/.config
               sed -i '/CONFIG_TARGET_ROOTFS_PARTSIZE/d' openwrt/.config
             fi
+            
+            # LEDE ssl bugfix
+            sed -i 's/CONFIG_PACKAGE_libustream-openssl=y/# CONFIG_PACKAGE_libustream-openssl is not set/g' openwrt/.config
+            sed -i 's/CONFIG_DEFAULT_libustream-openssl=y/# CONFIG_DEFAULT_libustream-openssl is not set/g' openwrt/.config
+            cat >> openwrt/.config <<EOF
+          CONFIG_PACKAGE_libustream-mbedtls=y
+          CONFIG_DEFAULT_libustream-mbedtls=y
+          CONFIG_PACKAGE_ca-bundle=y
+          CONFIG_PACKAGE_ca-certificates=y
+          EOF
+
+          elif [ "${CONF_NAME}" == "openwrt" ]; then
+            cat >> openwrt/.config <<EOF
+          CONFIG_PACKAGE_luci-app-diskman=y
+          CONFIG_PACKAGE_luci-app-diskman_INCLUDE_lsblk=y
+          CONFIG_PACKAGE_luci-app-turboacc=y
+          CONFIG_PACKAGE_luci-app-turboacc_INCLUDE_OFFLOADING=y
+          CONFIG_PACKAGE_luci-app-turboacc_INCLUDE_BBR_CCA=y
+          CONFIG_PACKAGE_luci-app-turboacc_INCLUDE_NFT_FULLCONE=y
+          EOF
           fi
-          
-          # 针对 OpenWrt 体系写入基础插件与解耦逻辑
-          if [ "${{ env.FIRMWARE_LOWER }}" == "openwrt" ]; then
-            echo "====== 开始向 OpenWrt 体系动态注入选定插件 ======"
 
-            # 1. 基础积木 (白板已有 docker 引擎，无需 echo)
-            echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-lucky=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-openclash=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
-          
-            # 追加 Diskman 及其 lsblk 依赖
-            echo "CONFIG_PACKAGE_luci-app-diskman=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-diskman_INCLUDE_lsblk=y" >> openwrt/.config
-
-            # 追加 OpenWrt 专属的 TurboACC 及其子模块集成
-            echo "CONFIG_PACKAGE_luci-app-turboacc=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-turboacc_INCLUDE_OFFLOADING=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-turboacc_INCLUDE_BBR_CCA=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-turboacc_INCLUDE_NFT_FULLCONE=y" >> openwrt/.config
-
-            # 2. Public 专属套餐
-            if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
-              echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
-          
-              echo "CONFIG_PACKAGE_luci-app-passwall=y" >> openwrt/.config
-              # 严格遵守 OpenWrt 的 Nftables 规则
-              echo "CONFIG_PACKAGE_luci-app-passwall_Nftables_Transparent_Proxy=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Geoview=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Haproxy=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Hysteria=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_ShadowsocksR_Libev_Client=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_SingBox=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Geodata=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Plugin=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=y" >> openwrt/.config
+          # 4. Public 与 Personal 构建目标分支
+          if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
+            echo "====== 注入 Public 科学套件 ======"
+            cat >> openwrt/.config <<EOF
+          CONFIG_PACKAGE_luci-app-daede=y
+          CONFIG_PACKAGE_dae=y
+          CONFIG_PACKAGE_luci-app-passwall=y
+          CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Geoview=y
+          CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Haproxy=y
+          CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Hysteria=y
+          CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y
+          CONFIG_PACKAGE_luci-app-passwall_INCLUDE_ShadowsocksR_Libev_Client=y
+          CONFIG_PACKAGE_luci-app-passwall_INCLUDE_SingBox=y
+          CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Geodata=y
+          CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Plugin=y
+          CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y
+          CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=y
+          EOF
+            # Passwall 防火墙引擎差异判断
+            if [[ "${CONF_NAME}" == lede* ]]; then
+               echo "CONFIG_PACKAGE_luci-app-passwall_Iptables_Transparent_Proxy=y" >> openwrt/.config
+            else
+               echo "CONFIG_PACKAGE_luci-app-passwall_Nftables_Transparent_Proxy=y" >> openwrt/.config
             fi
-          fi
-          
-          if [ "${{ env.FIRMWARE_LOWER }}" == "immortalwrt" ]; then
-            echo "====== 开始向 ImmortalWrt 体系动态注入选定插件 ======"
 
-            # 1. 基础积木与专属主题
-            echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-lucky=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-openclash=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
-          
-            # 追加 Diskman 及其 lsblk 依赖 (白板缺失项)
-            echo "CONFIG_PACKAGE_luci-app-diskman=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-diskman_INCLUDE_lsblk=y" >> openwrt/.config
-
-            # 2. Public 专属科学套餐
-            if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
-              # DAE 套件
-              echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
-          
-              # Passwall 及其底层组件精确勾选
-              echo "CONFIG_PACKAGE_luci-app-passwall=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_Nftables_Transparent_Proxy=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Geoview=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Haproxy=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Hysteria=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_ShadowsocksR_Libev_Client=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_SingBox=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Geodata=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Plugin=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=y" >> openwrt/.config
-            fi
-          fi
-          
-          if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
+          elif [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
             echo "====== 开始注入 Personal 版本专属强效断根指令 ======"
             sed -i 's/CONFIG_PACKAGE_luci-app-dockerman=y/# CONFIG_PACKAGE_luci-app-dockerman is not set/g' openwrt/.config
             sed -i 's/CONFIG_PACKAGE_luci-lib-docker=y/# CONFIG_PACKAGE_luci-lib-docker is not set/g' openwrt/.config
@@ -395,84 +334,6 @@ jobs:
             sed -i 's/CONFIG_PACKAGE_runc=y/# CONFIG_PACKAGE_runc is not set/g' openwrt/.config
             sed -i 's/CONFIG_DOCKER_NET_MACVLAN=y/# CONFIG_DOCKER_NET_MACVLAN is not set/g' openwrt/.config
             sed -i 's/CONFIG_DOCKER_STO_EXT4=y/# CONFIG_DOCKER_STO_EXT4 is not set/g' openwrt/.config
-          
-            sed -i 's/CONFIG_PACKAGE_luci-app-passwall=y/# CONFIG_PACKAGE_luci-app-passwall is not set/g' openwrt/.config
-            sed -i '/CONFIG_PACKAGE_luci-app-passwall_/d' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y/# CONFIG_PACKAGE_luci-i18n-passwall-zh-cn is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_luci-app-ssr-plus=y/# CONFIG_PACKAGE_luci-app-ssr-plus is not set/g' openwrt/.config
-            sed -i '/CONFIG_PACKAGE_luci-app-ssr-plus_/d' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_xray-core=y/# CONFIG_PACKAGE_xray-core is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_sing-box=y/# CONFIG_PACKAGE_sing-box is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_shadowsocksr-libev-ssr-local=y/# CONFIG_PACKAGE_shadowsocksr-libev-ssr-local is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_shadowsocksr-libev-ssr-redir=y/# CONFIG_PACKAGE_shadowsocksr-libev-ssr-redir is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_v2ray-plugin=y/# CONFIG_PACKAGE_v2ray-plugin is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_v2ray-geoip=y/# CONFIG_PACKAGE_v2ray-geoip is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_v2ray-geosite=y/# CONFIG_PACKAGE_v2ray-geosite is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_shadowsocks-rust=y/# CONFIG_PACKAGE_shadowsocks-rust is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Server=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Server is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_shadowsocks-rust-sslocal=y/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/g' openwrt/.config
-          
-            sed -i 's/CONFIG_PACKAGE_haproxy=y/# CONFIG_PACKAGE_haproxy is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_chinadns-ng=y/# CONFIG_PACKAGE_chinadns-ng is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_dns2socks=y/# CONFIG_PACKAGE_dns2socks is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_ipt2socks=y/# CONFIG_PACKAGE_ipt2socks is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_microsocks=y/# CONFIG_PACKAGE_microsocks is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_tcping=y/# CONFIG_PACKAGE_tcping is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_geoview=y/# CONFIG_PACKAGE_geoview is not set/g' openwrt/.config
-            sed -i 's/CONFIG_PACKAGE_simple-obfs-client=y/# CONFIG_PACKAGE_simple-obfs-client is not set/g' openwrt/.config
-          fi
-          
-          echo "CONFIG_DEVEL=y" >> openwrt/.config
-          echo "CONFIG_BPF_TOOLCHAIN_HOST=y" >> openwrt/.config
-          
-          if [ "${{ env.FIRMWARE_LOWER }}" == "istoreos" ]; then
-            echo "====== 开始向 iStoreOS 写入定制插件配置 ======"
-          
-            # 基础定制应用
-            echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-lucky=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-openclash=y" >> openwrt/.config
-          
-            # 强制 iStoreOS 编译打包 Aurora 主题
-            echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
-
-            if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
-              # Public 专属科学与面板
-              echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
-          
-              # Passwall 及其底层组件精确勾选
-              echo "CONFIG_PACKAGE_luci-app-passwall=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_Nftables_Transparent_Proxy=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Geoview=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Haproxy=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Hysteria=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_ShadowsocksR_Libev_Client=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_SingBox=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Geodata=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Plugin=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y" >> openwrt/.config
-              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=y" >> openwrt/.config
-            fi
-          fi
-          
-          if [[ "${{ env.FIRMWARE_LOWER }}" == lede* ]]; then
-            echo "====== 修复 LEDE uclient-fetch 的 SSL 兼容性 Bug ======"
-            # 禁用有兼容性问题的 openssl 插件
-            sed -i 's/CONFIG_PACKAGE_libustream-openssl=y/# CONFIG_PACKAGE_libustream-openssl is not set/g' openwrt/.config
-            sed -i 's/CONFIG_DEFAULT_libustream-openssl=y/# CONFIG_DEFAULT_libustream-openssl is not set/g' openwrt/.config
-          
-            # 强制替换为更稳定、兼容性更好的 mbedtls
-            echo "CONFIG_PACKAGE_libustream-mbedtls=y" >> openwrt/.config
-            echo "CONFIG_DEFAULT_libustream-mbedtls=y" >> openwrt/.config
-          
-            # 确保基础证书链存在
-            echo "CONFIG_PACKAGE_ca-bundle=y" >> openwrt/.config
-            echo "CONFIG_PACKAGE_ca-certificates=y" >> openwrt/.config
           fi
           
           cd openwrt
