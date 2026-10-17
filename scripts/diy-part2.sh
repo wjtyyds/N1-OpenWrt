@@ -154,15 +154,14 @@ rm -rf /tmp/OpenClash
 if [ "$BUILD_TYPE" == "public" ]; then
     echo "【公共版】：已配置拉取完整代理编译组件..."
     
-    # 根据用户规则：09.09 不拉 passwall 也不拉 dae；09.16 不拉 dae；10.11 全拉。
-    # 修改 Passwall 的判断条件：
-    if [[ "$TARGET_DATE_SIMPLE" != *"2026.09.09"* ]]; then
+    # 彻底弃用 SIMPLE 变量，改用带中划线的 ISO 变量 (如 2026-09-09) 进行绝对拦截
+    if [[ "$TARGET_DATE_ISO" != *"2026-09-09"* ]]; then
         clone_time_machine "https://github.com/Openwrt-Passwall/openwrt-passwall-packages" "passwall-packages" "$TARGET_DATE_ISO" "true"
         clone_time_machine "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci" "$TARGET_DATE_ISO"
     fi
 
-    # 修改 Daede 的判断条件：
-    if [[ "$TARGET_DATE_SIMPLE" != *"2026.09.09"* ]] && [[ "$TARGET_DATE_SIMPLE" != *"2026.09.16"* ]]; then
+    # 针对 Daede 增加 09.16 的拦截，并且去掉 "true" 恢复 Tag 拉取
+    if [[ "$TARGET_DATE_ISO" != *"2026-09-09"* ]] && [[ "$TARGET_DATE_ISO" != *"2026-09-16"* ]]; then
         clone_time_machine "https://github.com/kenzok8/openwrt-daede" "daede" "$TARGET_DATE_ISO"
     fi
 else
