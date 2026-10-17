@@ -2,24 +2,75 @@
 # diy-part2.sh
 
 # ==========================================
-# 0. 获取最新 Tag 克隆函数 (已强化鉴权与日志)
+# 0. 获取最新或指定日期的 Tag/Hash 克隆函数 (时光机核心)
 # ==========================================
-clone_latest_tag() {
+clone_time_machine() {
     local repo_url=$1
     local dest_dir=$2
-    local api_url="https://api.github.com/repos/${repo_url#https://github.com/}/releases/latest"
+    local target_date=$3
+    local use_hash_only=$4
 
-    echo "查询 $dest_dir 最新 Tag..."
-    local api_resp=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$api_url")
-    local latest_tag=$(echo "$api_resp" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    local repo_path=$(echo "$repo_url" | sed -E 's|https://github.com/([^/]+/[^/.]+)(\.git)?|\1|')
+    
+    echo "=========================================="
+    echo "🚀 启动 [时光机克隆]: 目标目录 -> $dest_dir"
+    echo "📅 目标节点: ${target_date:-最新}"
+    echo "=========================================="
+    
+    # 场景 A: 没有指定日期，直接拉取最新 Tag (如果没 Tag 拉 master 最新)
+    if [ -z "$target_date" ]; then
+        local api_resp=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$repo_path/releases/latest")
+        local latest_tag=$(echo "$api_resp" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
-    if [ -n "$latest_tag" ]; then
-        echo "✅ 成功解析到 $dest_dir 最新 Tag: $latest_tag，正在克隆..."
-        git clone --branch "$latest_tag" --depth 1 "$repo_url" "package/custom/$dest_dir"
+        if [ -n "$latest_tag" ]; then
+            echo "✅ [常规拉取] 找到最新 Tag: $latest_tag，正在浅克隆..."
+            git clone --branch "$latest_tag" --depth 1 "$repo_url" "package/custom/$dest_dir"
+        else
+            echo "⚠️ [常规拉取] 未找到 Tag，直接拉取默认分支最新代码..."
+            git clone --depth 1 "$repo_url" "package/custom/$dest_dir"
+        fi
+        return 0
+    fi
+    
+    # 场景 B: 指定了日期，启动严格的回溯机制
+    # 1. 尝试寻找日期之前的最新 Release Tag (除非强制只找 Hash)
+    if [ "$use_hash_only" != "true" ]; then
+        echo "🔍 [时光机] 正在检索 $target_date 之前的最新 Tag..."
+        # 遍历前 30 个 releases
+        local releases_json=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$repo_path/releases?per_page=30")
+        
+        # 提取 published_at 和 tag_name
+        local target_tag=""
+        
+        # jq 脚本：找出第一个 published_at < target_date 的 release 的 tag_name
+        target_tag=$(echo "$releases_json" | jq -r --arg date "$target_date" 'map(select(.published_at < $date)) | .[0].tag_name // empty')
+        
+        if [ -n "$target_tag" ] && [ "$target_tag" != "null" ]; then
+            echo "🎉 [时光机] 精准锁定！找到历史 Tag: $target_tag"
+            git clone --branch "$target_tag" --depth 1 "$repo_url" "package/custom/$dest_dir"
+            return 0
+        else
+            echo "⚠️ [时光机] 未能在历史中找到合适的 Tag，将降级寻找 Commit Hash..."
+        fi
+    fi
+    
+    # 2. 降级或强制寻找日期之前的最后一次 Commit Hash
+    echo "🔍 [时光机] 正在检索 $target_date 之前的最后一次提交..."
+    
+    # 获取默认分支 (通常是 master 或 main)
+    local default_branch=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$repo_path" | jq -r '.default_branch // "master"')
+    
+    local api_url="https://api.github.com/repos/$repo_path/commits?sha=$default_branch&until=$target_date&per_page=1"
+    local commit_hash=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$api_url" | jq -r '.[0].sha // empty')
+    
+    if [ -n "$commit_hash" ] && [ "$commit_hash" != "null" ]; then
+        echo "🎉 [时光机] 精准锁定！找到历史 Hash: ${commit_hash:0:7}"
+        git clone "$repo_url" "package/custom/$dest_dir"
+        cd "package/custom/$dest_dir"
+        git reset --hard "$commit_hash"
+        cd - > /dev/null
     else
-        echo "❌ 未能从 API 解析到 $dest_dir 的 Tag！API 响应详情："
-        echo "$api_resp" | head -n 15
-        echo "⚠️ 强制回退，正在拉取默认分支最新代码..."
+        echo "❌ [时光机] 彻底失败！未找到任何历史记录。降级拉取最新代码！"
         git clone --depth 1 "$repo_url" "package/custom/$dest_dir"
     fi
 }
@@ -68,18 +119,27 @@ if [ "$BUILD_TYPE" == "personal" ]; then
 fi
 
 # ==========================================
-# 3. 统一拉取：共用的第三方基础插件库 (全局生效)
+# 3. 统一拉取：共用的第三方基础插件库 (全局生效，带时光机)
 # ==========================================
 echo "====== 统一拉取定制基础插件源码 ======"
-git clone --depth 1 https://github.com/wjtyyds/luci-app-adguardhome.git package/custom/luci-app-adguardhome
-clone_latest_tag "https://github.com/gdy666/luci-app-lucky" "lucky"
-clone_latest_tag "https://github.com/destan19/OpenAppFilter" "luci-app-oaf"
-clone_latest_tag "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora"
-clone_latest_tag "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config"
+# AdGuardHome 不好抓 Tag，强制使用 Hash 模式 ("true" 作为第 4 个参数)
+clone_time_machine "https://github.com/wjtyyds/luci-app-adguardhome" "luci-app-adguardhome" "$TARGET_DATE_ISO" "true"
+clone_time_machine "https://github.com/gdy666/luci-app-lucky" "lucky" "$TARGET_DATE_ISO"
+clone_time_machine "https://github.com/destan19/OpenAppFilter" "luci-app-oaf" "$TARGET_DATE_ISO" "true"
+clone_time_machine "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora" "$TARGET_DATE_ISO"
+clone_time_machine "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config" "$TARGET_DATE_ISO"
 
-# 统一：OpenClash 浅克隆
+# 统一：OpenClash 浅克隆 (融入时光机逻辑)
 OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
-OPENCLASH_TAG=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+echo "正在获取 OpenClash..."
+if [ -n "$TARGET_DATE_ISO" ]; then
+    OPENCLASH_RELEASES=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/vernesong/OpenClash/releases?per_page=30")
+    OPENCLASH_TAG=$(echo "$OPENCLASH_RELEASES" | jq -r --arg date "$TARGET_DATE_ISO" 'map(select(.published_at < $date)) | .[0].tag_name // empty')
+else
+    OPENCLASH_TAG=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/vernesong/OpenClash/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+fi
+echo "[时光机] OpenClash 锁定于: ${OPENCLASH_TAG:-最新 master}"
+
 mkdir -p /tmp/OpenClash && cd /tmp/OpenClash
 git init; git remote add origin "$OPENCLASH_REPO"; git config core.sparseCheckout true
 echo "luci-app-openclash/*" >> .git/info/sparse-checkout
@@ -93,9 +153,17 @@ rm -rf /tmp/OpenClash
 # ==========================================
 if [ "$BUILD_TYPE" == "public" ]; then
     echo "【公共版】：已配置拉取完整代理编译组件..."
-    git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/custom/passwall-packages
-    clone_latest_tag "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci"
-    clone_latest_tag "https://github.com/kenzok8/openwrt-daede" "daede"
+    
+    # 根据用户规则：09.09 不拉 passwall 也不拉 dae；09.16 不拉 dae；10.11 全拉。
+    if [ "$TARGET_DATE_SIMPLE" != "2026.09.09" ]; then
+        clone_time_machine "https://github.com/Openwrt-Passwall/openwrt-passwall-packages" "passwall-packages" "$TARGET_DATE_ISO"
+        clone_time_machine "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci" "$TARGET_DATE_ISO"
+    fi
+    
+    if [ "$TARGET_DATE_SIMPLE" != "2026.09.09" ] && [ "$TARGET_DATE_SIMPLE" != "2026.09.16" ]; then
+        # daede 我们也用 hash 退回
+        clone_time_machine "https://github.com/kenzok8/openwrt-daede" "daede" "$TARGET_DATE_ISO" "true"
+    fi
 else
     echo "【私有版】：已阻断外部代理套件克隆..."
 fi
@@ -104,6 +172,13 @@ fi
 # 5. 差异化操作：各分支专有的修补逻辑
 # ==========================================
 echo "====== 开始各分支的差异化特征修改 ======"
+
+if [ "$TARGET_DATE_SIMPLE" == "2026.09.09" ]; then
+    echo "【2026.09.09 专属补丁】: 删除自带 Dockerman，拉取自定版本..."
+    rm -rf feeds/luci/applications/luci-app-dockerman 2>/dev/null
+    rm -rf feeds/luci/libs/luci-lib-docker 2>/dev/null
+    clone_time_machine "https://github.com/wjtyyds/luci-app-dockerman" "luci-app-dockerman" "$TARGET_DATE_ISO" "true"
+fi
 
 if [[ "$FIRMWARE_TYPE" == lede* ]]; then
     if [ "$FIRMWARE_TYPE" == "lede-native" ]; then
