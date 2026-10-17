@@ -417,6 +417,7 @@ jobs:
           GH_TOKEN: ${{ secrets.PRIVATE_TOKEN }}
           PRIVATE_REPO: ${{ secrets.PRIVATE_REPO }}
           BUILD_LOWER: ${{ env.BUILD_LOWER }}
+          TARGET_DATE_ISO: ${{ env.TARGET_DATE_ISO }}
         run: |
           echo "====== 原生编译：前置注入最新内核与私密配置 ======"
           BASE_FILES="openwrt/package/base-files/files"
@@ -426,12 +427,17 @@ jobs:
           mkdir -p $BASE_FILES/etc/init.d
           mkdir -p $BASE_FILES/etc/rc.d
           
-          echo "提取官方最新 AdGuardHome..."
-          # 这里 AdGuardHome 的二进制预编译直接拉最新的问题不大，但如果也需要严谨回退，可以改为下载旧版本。
-          # 暂时保持最新下载逻辑，因为前置二进制属于工具
-          AGH_API="https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest"
-          AGH_URL=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$AGH_API" | grep "browser_download_url" | grep "linux_arm64.tar.gz" | head -n 1 | cut -d '"' -f 4)
-          if [ -n "$AGH_URL" ]; then
+          echo "提取官方 AdGuardHome (融入时光机，且强制稳定版)..."
+          if [ -n "$TARGET_DATE_ISO" ]; then
+              AGH_API="https://api.github.com/repos/AdguardTeam/AdGuardHome/releases?per_page=50"
+              AGH_URL=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$AGH_API" | jq -r --arg date "$TARGET_DATE_ISO" 'map(select(.published_at < $date and .prerelease == false)) | .[0].assets[] | select(.name | contains("linux_arm64.tar.gz")) | .browser_download_url' | head -n 1)
+          else
+              AGH_API="https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest"
+              AGH_URL=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "$AGH_API" | grep "browser_download_url" | grep "linux_arm64.tar.gz" | head -n 1 | cut -d '"' -f 4)
+          fi
+          
+          if [ -n "$AGH_URL" ] && [ "$AGH_URL" != "null" ]; then
+              echo "✅ 锁定 AdGuardHome 稳定版链接: $AGH_URL"
               wget -qO /tmp/agh.tar.gz "$AGH_URL"
               tar -xzf /tmp/agh.tar.gz -C /tmp/
               mv /tmp/AdGuardHome/AdGuardHome $BASE_FILES/usr/lib/adg_core/
@@ -457,8 +463,17 @@ jobs:
             sed -i 's|$(PKG_BUILD_DIR)[^ ]*lucky|$(TOPDIR)/custom_bins/lucky|g' openwrt/package/custom/lucky/lucky/Makefile
           fi
           
-          echo "提取 OpenClash Meta..."
-          wget -qO /tmp/clash_meta.tar.gz "https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz" || true
+          echo "提取 OpenClash Meta (融入时光机)..."
+          if [ -n "$TARGET_DATE_ISO" ]; then
+              CORE_HASH=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/vernesong/OpenClash/commits?sha=core&until=$TARGET_DATE_ISO&per_page=1" | jq -r '.[0].sha')
+              if [ "$CORE_HASH" == "null" ] || [ -z "$CORE_HASH" ]; then CORE_HASH="master"; fi
+          else
+              CORE_HASH="master"
+          fi
+          
+          META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/${CORE_HASH}/meta/clash-linux-arm64.tar.gz"
+          echo "✅ 锁定 Meta Core 链接: $META_URL"
+          wget -qO /tmp/clash_meta.tar.gz "$META_URL" || true
           if [ -f /tmp/clash_meta.tar.gz ]; then
               tar -xzf /tmp/clash_meta.tar.gz -C /tmp/ || true
               mv /tmp/clash $BASE_FILES/etc/openclash/core/clash_meta || true
@@ -529,7 +544,7 @@ jobs:
           exit 0
           EOF
           chmod +x $BASE_FILES/etc/rc.local
-
+          
           # --- 新增：仅针对 iStoreOS 在 /root 下建立 install-to-emmc.sh 的软链接 ---
           if [ "$FIRMWARE_LOWER" == "istoreos" ]; then
               echo "为 iStoreOS 创建 /root/install-to-emmc.sh 软链接..."
