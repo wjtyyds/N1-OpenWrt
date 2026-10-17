@@ -347,6 +347,43 @@ jobs:
             fi
           fi
           
+          if [ "${{ env.FIRMWARE_LOWER }}" == "immortalwrt" ]; then
+            echo "====== 开始向 ImmortalWrt 体系动态注入选定插件 ======"
+
+            # 1. 基础积木与专属主题
+            echo "CONFIG_PACKAGE_luci-theme-aurora=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-aurora-config=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-lucky=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-openclash=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-oaf=y" >> openwrt/.config
+          
+            # 追加 Diskman 及其 lsblk 依赖 (白板缺失项)
+            echo "CONFIG_PACKAGE_luci-app-diskman=y" >> openwrt/.config
+            echo "CONFIG_PACKAGE_luci-app-diskman_INCLUDE_lsblk=y" >> openwrt/.config
+
+            # 2. Public 专属科学套餐
+            if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
+              # DAE 套件
+              echo "CONFIG_PACKAGE_luci-app-daede=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_dae=y" >> openwrt/.config
+          
+              # Passwall 及其底层组件精确勾选
+              echo "CONFIG_PACKAGE_luci-app-passwall=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_Nftables_Transparent_Proxy=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Geoview=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Haproxy=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Hysteria=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_ShadowsocksR_Libev_Client=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_SingBox=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Geodata=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Plugin=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y" >> openwrt/.config
+              echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=y" >> openwrt/.config
+            fi
+          fi
+          
           if [ "${{ env.BUILD_LOWER }}" == "personal" ]; then
             echo "====== 开始注入 Personal 版本专属强效断根指令 ======"
             sed -i 's/CONFIG_PACKAGE_luci-app-dockerman=y/# CONFIG_PACKAGE_luci-app-dockerman is not set/g' openwrt/.config
@@ -442,7 +479,6 @@ jobs:
           make defconfig
 
       - name: Inject Binaries & Configs (原生编译前置注入)
-        if: startsWith(env.FIRMWARE_LOWER, 'lede') || env.FIRMWARE_LOWER == 'istoreos' || env.FIRMWARE_LOWER == 'openwrt'
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_TOKEN }}
           PRIVATE_REPO: ${{ secrets.PRIVATE_REPO }}
