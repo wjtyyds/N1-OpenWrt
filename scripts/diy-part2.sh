@@ -41,11 +41,16 @@ fi
 # ==========================================
 
 if [[ "$FIRMWARE_TYPE" == lede* ]]; then
-    echo "====== 开始执行 LEDE 专属定制 ======"
+    echo "====== 开始执行 LEDE 体系(包含原生) 的共同定制 ======"
 
-    # 强制将 Amlogic 架构的默认内核从 6.18 改为 6.6
-    sed -i 's/KERNEL_PATCHVER:=6.18/KERNEL_PATCHVER:=6.6/g' target/linux/amlogic/Makefile
-    
+    # 1. 只有 Lede-Native 才执行的专属内核替换逻辑！
+    if [ "$FIRMWARE_TYPE" == "lede-native" ]; then
+        echo "【原生编译】：强制将 Amlogic 架构的默认内核从 6.18 改为 6.6"
+        sed -i 's/KERNEL_PATCHVER:=6.18/KERNEL_PATCHVER:=6.6/g' target/linux/amlogic/Makefile
+    else
+        echo "【F大打包】：保持lede默认设置内核的版本用于基础编译，跳过内核 Makefile 篡改"
+    fi
+
     lede_conflict_plugins=(
         "adguardhome" "luci-app-adguardhome"
         "luci-app-openclash" "openclash"
