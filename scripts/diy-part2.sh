@@ -206,13 +206,17 @@ fi
 # ==========================================
 echo "====== 开始各分支的差异化特征修改 ======"
 
-# 替换为 TARGET_DATE_ISO 通配符包含匹配，并增加日志
 echo "👉 [DEBUG-SH] 差异化补丁检查，TARGET_DATE_ISO: [$TARGET_DATE_ISO]"
 if [[ "$TARGET_DATE_ISO" == *"2026-09-09"* ]]; then
     echo "【2026.09.09 专属补丁】: 命中，开始执行 Dockerman 替换..."
+    
+    # 彻底移除系统自带的应用包和依赖库
     rm -rf feeds/luci/applications/luci-app-dockerman 2>/dev/null
     rm -rf feeds/luci/libs/luci-lib-docker 2>/dev/null
+
+    # 拉取自定义的应用包和依赖库 (均强制使用 Hash 拉取模式以避开无效 Tag)
     clone_time_machine "https://github.com/wjtyyds/luci-app-dockerman" "luci-app-dockerman" "$TARGET_DATE_ISO" "true"
+    clone_time_machine "https://github.com/wjtyyds/luci-lib-docker" "luci-lib-docker" "$TARGET_DATE_ISO" "true"
 else
     echo "✅ [DEBUG-SH] 未命中 09.09，跳过 Dockerman 替换。"
 fi
