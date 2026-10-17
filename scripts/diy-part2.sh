@@ -126,8 +126,18 @@ echo "====== 统一拉取定制基础插件源码 ======"
 clone_time_machine "https://github.com/wjtyyds/luci-app-adguardhome" "luci-app-adguardhome" ""
 clone_time_machine "https://github.com/gdy666/luci-app-lucky" "lucky" "$TARGET_DATE_ISO"
 clone_time_machine "https://github.com/destan19/OpenAppFilter" "luci-app-oaf" "$TARGET_DATE_ISO"
-clone_time_machine "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora" "$TARGET_DATE_ISO"
-clone_time_machine "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config" "$TARGET_DATE_ISO"
+
+# 针对 09.16 专属判断：强制克隆 Aurora 系列的指定版本
+echo "👉 [DEBUG-SH] 检查 Aurora 主题拉取策略，TARGET_DATE_ISO: [$TARGET_DATE_ISO]"
+if [[ "$TARGET_DATE_ISO" == *"2026-09-16"* ]]; then
+    echo "【2026.09.16 专属策略】: 命中，强制拉取 Aurora 指定历史版本..."
+    git clone -b v1.4.0 --depth 1 "https://github.com/eamonxg/luci-theme-aurora" "package/custom/luci-theme-aurora"
+    git clone -b v1.2.5 --depth 1 "https://github.com/eamonxg/luci-app-aurora-config" "package/custom/luci-app-aurora-config"
+else
+    echo "✅ [DEBUG-SH] 未命中 09.16 拦截，Aurora 走正常时光机流程。"
+    clone_time_machine "https://github.com/eamonxg/luci-theme-aurora" "luci-theme-aurora" "$TARGET_DATE_ISO"
+    clone_time_machine "https://github.com/eamonxg/luci-app-aurora-config" "luci-app-aurora-config" "$TARGET_DATE_ISO"
+fi
 
 # 统一：OpenClash 浅克隆 (融入时光机逻辑)
 OPENCLASH_REPO="https://github.com/vernesong/OpenClash"
