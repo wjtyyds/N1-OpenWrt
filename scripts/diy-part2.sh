@@ -504,13 +504,30 @@ if [ -f /etc/config/aurora ]; then
     uci commit aurora 2>/dev/null
 fi
 
-# 5. 首次开机自动唤醒 WiFi，并修改 SSID 与密码
-# (开机时内核已探明硬件并生成了 wireless 文件，直接通过 UCI 修改首个无线节点)
-uci set wireless.@wifi-device[0].disabled='0' 2>/dev/null
-uci set wireless.@wifi-iface[0].ssid='Phicomm_n1' 2>/dev/null
-uci set wireless.@wifi-iface[0].encryption='psk2' 2>/dev/null
-uci set wireless.@wifi-iface[0].key='password' 2>/dev/null
-uci commit wireless 2>/dev/null
+# 5. 首次开机自动唤醒 WiFi 并修改参数（后台轮询）
+(
+    # 循环等待，直到系统内核成功挂载 wlan 物理接口
+    for i in $(seq 1 15); do
+        if ls /sys/class/net/ | grep -q "^wlan"; then
+            break
+        fi
+        sleep 2
+    done
+
+    # 触发系统原生生成默认配置（不加 rm -f，绝不破坏原有默认参数）
+    wifi config 2>/dev/null
+
+    # 只做最精简的定制：解禁硬件、改名、加密码
+    uci set wireless.@wifi-device[0].disabled='0'
+    uci delete wireless.@wifi-iface[0].disabled 2>/dev/null
+    uci set wireless.@wifi-iface[0].ssid='Phicomm_n1'
+    uci set wireless.@wifi-iface[0].encryption='psk2'
+    uci set wireless.@wifi-iface[0].key='password'
+    uci commit wireless
+
+    # 强制拉起底层物理网卡
+    wifi up 2>/dev/null
+) &
 
 # 6. 重启网络与无线服务，使 IP、DHCP 和 WiFi 配置立即生效
 /etc/init.d/network restart

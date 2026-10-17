@@ -499,9 +499,10 @@ jobs:
           start() {
               (
                   sleep 5
-                  ROOT_DEV=$(df -h / | tail -n1 | awk '{print $1}')
                   IS_EMMC=0
-                  if echo "$ROOT_DEV" | grep -q "mmcblk"; then IS_EMMC=1; fi
+                  if mount | grep -E 'on /boot |on /rom |on / ' | grep -q "mmcblk"; then
+                    IS_EMMC=1
+                  fi
           
                   if [ -f /usr/lib/adg_core/AdGuardHome ]; then
                       if [ "$IS_EMMC" = "1" ] && [ -d /mnt/mmcblk2p4 ]; then
