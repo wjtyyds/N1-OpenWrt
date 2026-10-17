@@ -342,7 +342,13 @@ jobs:
           if [ "${{ env.BUILD_LOWER }}" == "public" ]; then
             echo "====== 注入 Public 科学套件 ======"
           
-            if [[ "${{ env.TARGET_DATE_SIMPLE }}" != "2026.09.09" ]]; then
+            # --- 新增日志输出开始 ---
+            echo "👉 [DEBUG] 当前注入拦截变量判断："
+            echo "  - TARGET_DATE_ISO (包含检查): [${{ env.TARGET_DATE_ISO }}]"
+            # --- 新增日志输出结束 ---
+          
+            if [[ "${{ env.TARGET_DATE_ISO }}" != *"2026-09-09"* ]]; then
+              echo "✅ [DEBUG] 未命中 09.09 拦截，正常注入 Passwall 等套件。"
               cat >> openwrt/.config <<EOF
           CONFIG_PACKAGE_luci-app-passwall=y
           CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Geoview=y
@@ -361,13 +367,19 @@ jobs:
               else
                  echo "CONFIG_PACKAGE_luci-app-passwall_Nftables_Transparent_Proxy=y" >> openwrt/.config
               fi
+            else
+              echo "⛔ [DEBUG] 已命中 09.09，成功拦截 Passwall 注入！"
             fi
-
-            if [[ "${{ env.TARGET_DATE_SIMPLE }}" != "2026.09.09" ]] && [[ "${{ env.TARGET_DATE_SIMPLE }}" != "2026.09.16" ]]; then
+            
+            # 替换为通配符包含匹配
+            if [[ "${{ env.TARGET_DATE_ISO }}" != *"2026-09-09"* ]] && [[ "${{ env.TARGET_DATE_ISO }}" != *"2026-09-16"* ]]; then
+              echo "✅ [DEBUG] 未命中 09.09/09.16 拦截，正常注入 Daede 套件。"
               cat >> openwrt/.config <<EOF
           CONFIG_PACKAGE_luci-app-daede=y
           CONFIG_PACKAGE_dae=y
           EOF
+            else
+              echo "⛔ [DEBUG] 已命中拦截日期，成功拦截 Daede 注入！"
             fi
 
           elif [ "${{ env.BUILD_LOWER }}" == "personal" ]; then

@@ -154,15 +154,22 @@ rm -rf /tmp/OpenClash
 if [ "$BUILD_TYPE" == "public" ]; then
     echo "【公共版】：已配置拉取完整代理编译组件..."
     
-    # 彻底弃用 SIMPLE 变量，改用带中划线的 ISO 变量 (如 2026-09-09) 进行绝对拦截
+    # 增加日志
+    echo "👉 [DEBUG-SH] 代理组件拉取拦截检查，TARGET_DATE_ISO: [$TARGET_DATE_ISO]"
+
     if [[ "$TARGET_DATE_ISO" != *"2026-09-09"* ]]; then
+        echo "✅ [DEBUG-SH] 未命中 09.09 拦截，拉取 Passwall。"
         clone_time_machine "https://github.com/Openwrt-Passwall/openwrt-passwall-packages" "passwall-packages" "$TARGET_DATE_ISO" "true"
         clone_time_machine "https://github.com/Openwrt-Passwall/openwrt-passwall" "passwall-luci" "$TARGET_DATE_ISO"
+    else
+        echo "⛔ [DEBUG-SH] 命中 09.09，拦截 Passwall 拉取！"
     fi
 
-    # 针对 Daede 增加 09.16 的拦截，并且去掉 "true" 恢复 Tag 拉取
     if [[ "$TARGET_DATE_ISO" != *"2026-09-09"* ]] && [[ "$TARGET_DATE_ISO" != *"2026-09-16"* ]]; then
+        echo "✅ [DEBUG-SH] 未命中 09.09/09.16 拦截，拉取 Daede。"
         clone_time_machine "https://github.com/kenzok8/openwrt-daede" "daede" "$TARGET_DATE_ISO"
+    else
+        echo "⛔ [DEBUG-SH] 命中拦截日期，拦截 Daede 拉取！"
     fi
 else
     echo "【私有版】：已阻断外部代理套件克隆..."
@@ -173,11 +180,15 @@ fi
 # ==========================================
 echo "====== 开始各分支的差异化特征修改 ======"
 
-if [ "$TARGET_DATE_SIMPLE" == "2026.09.09" ]; then
-    echo "【2026.09.09 专属补丁】: 删除自带 Dockerman，拉取自定版本..."
+# 替换为 TARGET_DATE_ISO 通配符包含匹配，并增加日志
+echo "👉 [DEBUG-SH] 差异化补丁检查，TARGET_DATE_ISO: [$TARGET_DATE_ISO]"
+if [[ "$TARGET_DATE_ISO" == *"2026-09-09"* ]]; then
+    echo "【2026.09.09 专属补丁】: 命中，开始执行 Dockerman 替换..."
     rm -rf feeds/luci/applications/luci-app-dockerman 2>/dev/null
     rm -rf feeds/luci/libs/luci-lib-docker 2>/dev/null
     clone_time_machine "https://github.com/wjtyyds/luci-app-dockerman" "luci-app-dockerman" "$TARGET_DATE_ISO" "true"
+else
+    echo "✅ [DEBUG-SH] 未命中 09.09，跳过 Dockerman 替换。"
 fi
 
 if [[ "$FIRMWARE_TYPE" == lede* ]]; then
